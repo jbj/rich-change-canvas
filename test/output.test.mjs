@@ -211,6 +211,8 @@ test("Opening a local file lazily renders its selected-scope diff", async () => 
   const output = outputCell.children.find((child) => child.tag === "pre");
   assert.equal(output.attributes.role, "region");
   assert.match(output.textContent, /\+value = 2/);
+  assert.match(readFileSync(new URL("../web/review.css", import.meta.url), "utf8"),
+    /\.diff-content[^}]*contain:\s*inline-size/);
   categoryToggle(page, "source").events.click();
   assert.equal(outputRow.hidden, true);
   categoryToggle(page, "source").events.click();

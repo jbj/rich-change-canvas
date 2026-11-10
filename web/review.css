@@ -105,7 +105,7 @@ code { font: inherit; overflow-wrap: anywhere; }
 .file-name { color: var(--blue); }
 .file-meta { margin-left: 8px; color: var(--muted); font-size: 10px; }
 .file-diff { display: inline-block; margin: 2px 0 4px; }
-.diff-content { overflow: auto; max-height: 420px; margin: 6px 0; padding: 8px; background: var(--panel); font: inherit; font-family: var(--font-mono, "SFMono-Regular", Consolas, "Liberation Mono", monospace); font-size: 11px; line-height: 16px; white-space: pre; }
+.diff-content { contain: inline-size; overflow: auto; max-height: 420px; margin: 6px 0; padding: 8px; background: var(--panel); font: inherit; font-family: var(--font-mono, "SFMono-Regular", Consolas, "Liberation Mono", monospace); font-size: 11px; line-height: 16px; white-space: pre; }
 .diff-added { color: var(--green); }
 .diff-deleted { color: var(--red); }
 .diff-hunk { color: var(--purple); }

@@ -69,15 +69,16 @@
       node.append(el("span", line, className), document.createTextNode("\n"));
     }
   }
-  function loadLocalDiff(details, file, current) {
+  function loadLocalDiff(details, file, current, diffCell, diffRow, isCategoryExpanded) {
     let loaded = false;
     details.addEventListener("toggle", () => {
+      diffRow.hidden = !details.open || !isCategoryExpanded();
       if (!details.open || loaded) return;
       loaded = true;
       const output = el("pre", "Loading diff…", "diff-content");
       output.setAttribute("role", "region");
       output.setAttribute("aria-label", `Diff for ${file.path}`);
-      details.append(output);
+      diffCell.append(output);
       const query = `scope=${encodeURIComponent(current.key)}&path=${encodeURIComponent(file.path)}`;
       fetch(`/diff?${query}`)
         .then(async (response) => {
@@ -125,7 +126,7 @@
         $("totals").append(stat);
       }
     }
-    function fileRow(file, maximum, url, current) {
+    function fileRow(file, maximum, url, current, isCategoryExpanded) {
       const row = el("tr", undefined, "file-row");
       row.dataset.filePath = file.path;
       row.dataset.category = file.category;
@@ -135,6 +136,7 @@
       summary.append(el("code", file.path, "file-name"), el("span", file.status, "file-meta"));
       details.append(summary);
       if (file.previousPath) details.append(el("p", `Previous path: ${file.previousPath}`));
+      let diffRow;
       if (url) {
         const diffLink = el("a", "Open diff ↗", "file-diff");
         diffLink.href = url;
@@ -142,7 +144,13 @@
         diffLink.rel = "noreferrer noopener";
         details.append(diffLink);
       } else if (selected().source.kind === "local") {
-        loadLocalDiff(details, file, current);
+        diffRow = el("tr", undefined, "diff-row");
+        diffRow.hidden = true;
+        diffRow.dataset.filePath = file.path;
+        const diffCell = el("td");
+        diffCell.colSpan = 3;
+        diffRow.append(diffCell);
+        loadLocalDiff(details, file, current, diffCell, diffRow, isCategoryExpanded);
       } else {
         details.append(el("p", "Diff not included in this report.", "muted"));
       }
@@ -158,7 +166,7 @@
           maximum, `${file.path}: ${count(file)} text lines; logarithmic scale 0–${maximum}`));
       }
       row.append(pathCell, metricCell, barCell);
-      return row;
+      return { row, diffRow, details };
     }
     function originalCommits(report) {
       $("commits-heading").textContent = `Original commits / ${report.commits.length} · inspect`;
@@ -211,15 +219,19 @@
             maximum, `${roles[key]}: ${count(metric)} text lines; logarithmic scale 0–${maximum}`));
         }
         categoryRow.append(nameCell, metricCell, barCell);
-        const files = metrics.fileMetrics.filter((file) => file.category === key);
-        const fileRows = files.map((file) => fileRow(file, maximum, url, current));
         let expanded = false;
+        const files = metrics.fileMetrics.filter((file) => file.category === key);
+        const fileRows = files.map((file) => fileRow(file, maximum, url, current, () => expanded));
         toggle.addEventListener("click", () => {
           expanded = !expanded;
           toggle.setAttribute("aria-expanded", String(expanded));
-          for (const row of fileRows) row.hidden = !expanded;
+          for (const { row, diffRow, details } of fileRows) {
+            row.hidden = !expanded;
+            if (diffRow) diffRow.hidden = !expanded || !details.open;
+          }
         });
-        $("category-rows").append(categoryRow, ...fileRows);
+        $("category-rows").append(categoryRow, ...fileRows.flatMap(({ row, diffRow }) =>
+          diffRow ? [row, diffRow] : [row]));
       }
       $("role-empty").hidden = metrics.files > 0;
       originalCommits(report);

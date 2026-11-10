@@ -80,6 +80,10 @@ function fileRow(page, path) {
   return page["category-rows"].children.find((row) =>
     row.className === "file-row" && row.dataset.filePath === path);
 }
+function diffRow(page, path) {
+  return page["category-rows"].children.find((row) =>
+    row.className === "diff-row" && row.dataset.filePath === path);
+}
 function fileRows(page) {
   return page["category-rows"].children.filter((row) => row.className === "file-row");
 }
@@ -196,13 +200,24 @@ test("Opening a local file lazily renders its selected-scope diff", async () => 
   const page = reviewPage(report), row = fileRow(page, "src/value.js");
   categoryToggle(page, "source").events.click();
   const details = row.children[0].children[0];
+  const outputRow = diffRow(page, "src/value.js"), outputCell = outputRow.children[0];
+  assert.equal(outputRow.hidden, true);
+  assert.equal(outputCell.colSpan, 3);
   details.open = true;
   details.events.toggle();
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(page.fetchRequests, ["/diff?scope=working&path=src%2Fvalue.js"]);
-  const output = details.children.find((child) => child.tag === "pre");
+  assert.equal(outputRow.hidden, false);
+  const output = outputCell.children.find((child) => child.tag === "pre");
   assert.equal(output.attributes.role, "region");
   assert.match(output.textContent, /\+value = 2/);
+  categoryToggle(page, "source").events.click();
+  assert.equal(outputRow.hidden, true);
+  categoryToggle(page, "source").events.click();
+  assert.equal(outputRow.hidden, false);
+  details.open = false;
+  details.events.toggle();
+  assert.equal(outputRow.hidden, true);
 });
 
 test("Commit selection updates grouped file diffs and retains the commit link", () => {

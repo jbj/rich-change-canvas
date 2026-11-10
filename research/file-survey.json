@@ -5,19 +5,19 @@
   "files": 393923,
   "otherShare": 0.0028,
   "categories": {
-    "test": 154409,
-    "source": 81212,
-    "snapshot": 66249,
-    "fixture": 54868,
+    "test": 133886,
+    "snapshot": 86186,
+    "source": 81323,
+    "fixture": 55361,
     "documentation": 14680,
     "configuration": 5341,
     "binary": 4187,
     "manifest": 3308,
-    "markup": 2818,
+    "markup": 2821,
     "generated": 2279,
-    "localization": 1252,
+    "localization": 1249,
     "test-support": 1140,
-    "other": 1102,
+    "other": 1084,
     "data": 761,
     "lockfile": 317
   },
@@ -62,23 +62,6 @@
       }
     },
     {
-      "repository": "junit-team/junit-framework",
-      "language": "Java",
-      "sha": "668e48196bf7ffca9d5ef6856ec0137bc4402492",
-      "files": 2465,
-      "otherShare": 0.0093,
-      "categories": {
-        "configuration": 60,
-        "documentation": 123,
-        "source": 961,
-        "binary": 13,
-        "other": 23,
-        "manifest": 93,
-        "test": 1090,
-        "test-support": 102
-      }
-    },
-    {
       "repository": "nodejs/node",
       "language": "JavaScript",
       "sha": "768315cf7165e9ff9b636844b776488e9d1703fc",
@@ -90,10 +73,10 @@
         "documentation": 1511,
         "manifest": 1128,
         "source": 22624,
-        "fixture": 7212,
+        "fixture": 7233,
         "lockfile": 59,
-        "test": 22533,
-        "snapshot": 266,
+        "test": 22044,
+        "snapshot": 734,
         "generated": 19,
         "binary": 236,
         "markup": 46,
@@ -132,7 +115,8 @@
         "manifest": 7,
         "source": 58,
         "other": 2,
-        "test": 268
+        "test": 150,
+        "snapshot": 118
       }
     },
     {
@@ -144,17 +128,16 @@
       "categories": {
         "configuration": 1262,
         "documentation": 6067,
-        "source": 17357,
+        "source": 17468,
         "manifest": 317,
         "lockfile": 31,
-        "test": 22553,
-        "snapshot": 226,
+        "test": 20131,
+        "snapshot": 2537,
         "other": 199,
         "binary": 608,
         "fixture": 109,
-        "localization": 3,
+        "markup": 4,
         "test-support": 802,
-        "markup": 1,
         "generated": 1270,
         "data": 741
       }
@@ -171,13 +154,13 @@
         "configuration": 826,
         "other": 73,
         "manifest": 128,
-        "test": 6013,
+        "test": 6008,
         "markup": 761,
         "binary": 327,
         "lockfile": 9,
-        "fixture": 883,
+        "fixture": 865,
         "localization": 17,
-        "snapshot": 488,
+        "snapshot": 511,
         "generated": 899
       }
     },
@@ -202,6 +185,24 @@
       }
     },
     {
+      "repository": "junit-team/junit-framework",
+      "language": "Java",
+      "sha": "668e48196bf7ffca9d5ef6856ec0137bc4402492",
+      "files": 2465,
+      "otherShare": 0.002,
+      "categories": {
+        "configuration": 60,
+        "documentation": 123,
+        "source": 961,
+        "binary": 13,
+        "other": 5,
+        "manifest": 93,
+        "test": 1090,
+        "test-support": 102,
+        "snapshot": 18
+      }
+    },
+    {
       "repository": "pandas-dev/pandas",
       "language": "Python",
       "sha": "0d4ce2cf8c6d9805ad9cb5d993497a351572ec6c",
@@ -215,7 +216,8 @@
         "binary": 176,
         "manifest": 12,
         "markup": 23,
-        "test": 1563,
+        "test": 1157,
+        "fixture": 406,
         "lockfile": 1
       }
     },
@@ -251,9 +253,9 @@
         "manifest": 285,
         "source": 6662,
         "markup": 27,
-        "test": 54025,
+        "test": 37102,
+        "snapshot": 17007,
         "fixture": 1241,
-        "snapshot": 84,
         "binary": 53,
         "generated": 3
       }
@@ -272,8 +274,9 @@
         "source": 364,
         "other": 4,
         "binary": 17,
-        "test": 2275,
-        "fixture": 1
+        "test": 2242,
+        "fixture": 1,
+        "snapshot": 33
       }
     },
     {
@@ -289,11 +292,11 @@
         "other": 13,
         "manifest": 634,
         "lockfile": 34,
-        "test": 4845,
+        "test": 4837,
         "markup": 980,
         "binary": 200,
         "localization": 5,
-        "fixture": 25,
+        "fixture": 33,
         "snapshot": 8
       }
     },
@@ -312,8 +315,8 @@
         "binary": 1337,
         "localization": 1226,
         "markup": 213,
-        "test": 2465,
-        "fixture": 75
+        "test": 2410,
+        "fixture": 130
       }
     },
     {
@@ -350,9 +353,9 @@
         "binary": 341,
         "lockfile": 10,
         "manifest": 10,
-        "test": 20795,
+        "test": 20783,
         "snapshot": 755,
-        "fixture": 5909
+        "fixture": 5921
       }
     },
     {
@@ -365,11 +368,12 @@
         "configuration": 57,
         "documentation": 81,
         "source": 631,
-        "test": 481,
+        "test": 465,
         "lockfile": 4,
+        "snapshot": 1,
         "markup": 2,
         "manifest": 5,
-        "fixture": 228,
+        "fixture": 243,
         "binary": 48,
         "generated": 7,
         "other": 1
@@ -448,7 +452,8 @@
         "binary": 42,
         "manifest": 3,
         "markup": 2,
-        "fixture": 824
+        "fixture": 818,
+        "snapshot": 6
       }
     },
     {
@@ -564,7 +569,8 @@
         "manifest": 13,
         "source": 506,
         "data": 1,
-        "test": 315
+        "test": 308,
+        "snapshot": 7
       }
     },
     {
@@ -580,15 +586,15 @@
         "lockfile": 1,
         "manifest": 9,
         "binary": 1,
-        "test": 170,
-        "snapshot": 130
+        "test": 141,
+        "snapshot": 159
       }
     }
   ],
   "topOtherExtensions": [
     [
       ".txt",
-      295
+      277
     ],
     [
       "(none) DEPS",
@@ -793,10 +799,6 @@
       22
     ],
     [
-      "junit-team/junit-framework:platform-tooling-support-tests/projects",
-      20
-    ],
-    [
       "nodejs/node:deps/crates",
       19
     ],
@@ -907,6 +909,10 @@
     [
       "elastic/elasticsearch:distribution/packages",
       5
+    ],
+    [
+      "nodejs/node:deps/icu-small",
+      4
     ]
   ]
 }

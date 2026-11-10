@@ -20,14 +20,16 @@ export function classify(path, binary = false) {
       /(^|\/)licenses\/[^/]+\.(sha1|sha256|sha512)$/.test(path)) {
     return rule("lockfile", "Recognized lockfile basename or pinned dependency checksum");
   }
-  if (/(^|\/)(__snapshots__|snapshots)\/|\.(snap|shot)$|\.snap\.|(^|\/)baselines\/reference\//.test(path) ||
+  if (/(^|\/)__snapshots__\/|\.(snap|shot)$|\.expected(\.[^/.]+)?$|\.(stderr|stdout)$|(^|\/)tests?\/.*\.out$|\.snap\.|(^|\/)baselines\/reference\//.test(path) ||
+      /(^|\/)snapshots\//.test(path) && !/(^|\/)(java|kotlin|scala|groovy)\/.*\.(java|kt|scala|groovy)$/.test(path) ||
       /\/test\/fixtures\/.*\/output\.(json|js|ts)$/.test(path)) {
-    return rule("snapshot", "Snapshot directory or extension");
+    return rule("snapshot", "Snapshot directory, recorded-output extension, or golden file");
   }
   if (/(^|\/)(testFixtures|test-fixtures)\//.test(path)) {
     return rule("test-support", "Dedicated test-support source directory");
   }
-  if (/(^|\/)(fixtures?|__fixtures__|testdata|test_data|test-files|test_files)\//i.test(path)) {
+  if (/(^|\/)(fixtures?|__fixtures__|testdata|test_data|test-files|test_files)\//i.test(path) ||
+      /(^|\/)tests?\/(.*\/)?data\//.test(path) && !/(^|\/)(java|kotlin|scala|groovy)\/.*\.(java|kt|scala|groovy)$/.test(path)) {
     return rule("fixture", "Recognized test-input directory");
   }
   if (/^tests\/format\//.test(path) && !/(^|\/)format\.test\.[cm]?[jt]s$/.test(path)) {
@@ -51,7 +53,7 @@ export function classify(path, binary = false) {
   if (/(\.pb\.go|\.generated\.[^/]+|\.gen\.[^/]+)$/.test(path) || /(^|\/)(generated|gen)\//.test(path)) {
     return rule("generated", "Explicit generated directory or filename convention");
   }
-  if (/\.(po|pot|isl|xlf|xliff|arb|resx|strings|ftl)$/i.test(name) || /(^|\/)(locales?|i18n|l10n)\/[^/]+\.json$/.test(path)) {
+  if (/\.(po|pot|isl|xlf|xliff|arb|resx|strings)$/i.test(name) || /(^|\/)(locales?|i18n|l10n)\/[^/]+\.json$/.test(path)) {
     return rule("localization", "Translation catalog extension or locale directory");
   }
   if (SOURCE_EXTENSIONS.test(name)) {
@@ -63,7 +65,7 @@ export function classify(path, binary = false) {
   if (/(^|\/)(bin|scripts?|\.husky|hooks|githooks)\/[^/.]+$/.test(path) || /(^|\/)docker[^/]*\/.*\/[^/.]+$/.test(path) && !/^[A-Z][A-Z_]+$/.test(name)) {
     return rule("source", "Extensionless file in a script, hook, or binary directory");
   }
-  if (/\.(html?|xhtml|css|scss|sass|less|styl|sss|pcss|svg|xsl|xslt|ejs|hbs|handlebars|mustache|njk|jinja2?|j2|liquid|twig|tpl|kml)$/i.test(name)) {
+  if (/\.(html?|xhtml|css|scss|sass|less|styl|sss|pcss|svg|xsl|xslt|ejs|hbs|handlebars|mustache|njk|jinja2?|j2|liquid|twig|tpl|ftl|ftlh|vm|kml)$/i.test(name)) {
     return rule("markup", "Markup, stylesheet, vector image, or template extension");
   }
   if (/\.(csv|tsv|psv|dat|dic|ndjson|jsonl|geojson|csv-spec|sql-spec)$/i.test(name)) {

@@ -11,7 +11,8 @@
     source: "Source", test: "Tests", "test-support": "Test support",
     fixture: "Inputs", snapshot: "Snapshots", documentation: "Docs",
     manifest: "Build / deps", lockfile: "Lockfiles", generated: "Generated",
-    configuration: "Config", binary: "Binary", other: "Other",
+    configuration: "Config", markup: "Markup / styles", localization: "Translations",
+    data: "Data", binary: "Binary", other: "Other",
   };
   const count = (metric) => `+${metric.additions} / -${metric.deletions}`;
   const delta = (metric) => {

@@ -60,6 +60,40 @@
     parsed.pathname = `${parsed.pathname.replace(/\/+$/, "")}/files`;
     return parsed.href;
   }
+  function renderDiff(node, patch) {
+    node.replaceChildren();
+    for (const line of patch.split("\n")) {
+      const className = line.startsWith("+++") || line.startsWith("---") || line.startsWith("diff --git") ? "diff-meta" :
+        line.startsWith("+") ? "diff-added" : line.startsWith("-") ? "diff-deleted" :
+          line.startsWith("@@") ? "diff-hunk" : "";
+      node.append(el("span", line, className), document.createTextNode("\n"));
+    }
+  }
+  function loadLocalDiff(details, file, current) {
+    let loaded = false;
+    details.addEventListener("toggle", () => {
+      if (!details.open || loaded) return;
+      loaded = true;
+      const output = el("pre", "Loading diff…", "diff-content");
+      output.setAttribute("role", "region");
+      output.setAttribute("aria-label", `Diff for ${file.path}`);
+      details.append(output);
+      const query = `scope=${encodeURIComponent(current.key)}&path=${encodeURIComponent(file.path)}`;
+      fetch(`/diff?${query}`)
+        .then(async (response) => {
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error ?? `Diff request failed (${response.status})`);
+          return result;
+        })
+        .then((result) => {
+          if (result.tooLarge) output.textContent = "Diff is too large to display here.";
+          else if (result.binary) output.textContent = "Binary file; no text diff.";
+          else if (!result.diff) output.textContent = "No textual changes in this scope.";
+          else renderDiff(output, result.diff);
+        })
+        .catch((error) => { output.textContent = `Unable to load diff: ${error.message}`; });
+    });
+  }
   try {
     const reports = JSON.parse($("report-data").textContent);
     if (!Array.isArray(reports) || !reports.length) throw new Error("No reports were provided");
@@ -67,14 +101,14 @@
     const scope = () => {
       const report = selected();
       const key = $("scope").value;
-      if (key === "whole") return { metrics: report.metrics };
+      if (key === "whole") return { key, metrics: report.metrics };
       if (key.startsWith("commit:")) {
         const commit = report.commits[Number(key.slice(7))];
-        return { metrics: commit.metrics, url: commit.url };
+        return { key, metrics: commit.metrics, url: commit.url };
       }
       const layer = report.layers.find((item) => item.id === key);
       if (!layer) throw new Error("Selected scope is unavailable");
-      return { metrics: layer.metrics };
+      return { key, metrics: layer.metrics };
     };
     function totals(metrics) {
       $("totals").replaceChildren();
@@ -91,7 +125,7 @@
         $("totals").append(stat);
       }
     }
-    function fileRow(file, maximum, url) {
+    function fileRow(file, maximum, url, current) {
       const row = el("tr", undefined, "file-row");
       row.dataset.filePath = file.path;
       row.dataset.category = file.category;
@@ -107,6 +141,10 @@
         diffLink.target = "_blank";
         diffLink.rel = "noreferrer noopener";
         details.append(diffLink);
+      } else if (selected().source.kind === "local") {
+        loadLocalDiff(details, file, current);
+      } else {
+        details.append(el("p", "Diff not included in this report.", "muted"));
       }
       const pathCell = el("td");
       pathCell.append(details);
@@ -174,7 +212,7 @@
         }
         categoryRow.append(nameCell, metricCell, barCell);
         const files = metrics.fileMetrics.filter((file) => file.category === key);
-        const fileRows = files.map((file) => fileRow(file, maximum, url));
+        const fileRows = files.map((file) => fileRow(file, maximum, url, current));
         let expanded = false;
         toggle.addEventListener("click", () => {
           expanded = !expanded;

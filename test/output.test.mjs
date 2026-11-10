@@ -26,6 +26,7 @@ function sample() {
 }
 
 function reviewPage(...reports) {
+  const fetchRequests = [];
   class Element {
     children = [];
     value = "";
@@ -57,8 +58,14 @@ function reviewPage(...reports) {
     createElementNS: (namespace, tag) => new Element(tag),
     createTextNode: (text) => new Element("#text", text),
   };
-  runInNewContext(readFileSync(new URL("../web/review.js", import.meta.url), "utf8"), { document, URL });
+  const fetch = async (url) => {
+    fetchRequests.push(url);
+    return { ok: true, status: 200, json: async () => ({ diff: "@@ -1 +1 @@\n-value = 1\n+value = 2\n" }) };
+  };
+  runInNewContext(readFileSync(new URL("../web/review.js", import.meta.url), "utf8"),
+    { document, URL, fetch, encodeURIComponent });
   assert.equal(nodes.error.textContent, "");
+  nodes.fetchRequests = fetchRequests;
   return nodes;
 }
 
@@ -178,6 +185,26 @@ test("Role bars share a text-line scale with expandable file rows", () => {
   assert.equal(testFile.hidden, false);
 });
 
+test("Opening a local file lazily renders its selected-scope diff", async () => {
+  const report = createReport({
+    source: { kind: "local", repository: "fixture" }, title: "Local changes",
+    comparison: { mergeBaseSha: "base", headSha: "head" }, files: [],
+    layers: [{ id: "working", title: "Unstaged", files: [
+      { path: "src/value.js", status: "modified", additions: 1, deletions: 1, patchState: "complete" },
+    ] }],
+  });
+  const page = reviewPage(report), row = fileRow(page, "src/value.js");
+  categoryToggle(page, "source").events.click();
+  const details = row.children[0].children[0];
+  details.open = true;
+  details.events.toggle();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(page.fetchRequests, ["/diff?scope=working&path=src%2Fvalue.js"]);
+  const output = details.children.find((child) => child.tag === "pre");
+  assert.equal(output.attributes.role, "region");
+  assert.match(output.textContent, /\+value = 2/);
+});
+
 test("Commit selection updates grouped file diffs and retains the commit link", () => {
   const file = (path, additions) => ({ path, additions, deletions: 0, status: "added", patchState: "complete" });
   const report = createReport({
@@ -255,6 +282,7 @@ test("HTML embeds untrusted data without script or template injection", () => {
   assert.ok(json.includes("__NONCE__"));
   assert.equal((html.match(/<script /g) ?? []).length, 2);
   assert.match(html, /default-src 'none'/);
+  assert.match(html, /connect-src 'self'/);
   const nonce = html.match(/script-src 'nonce-([^']+)'/)[1];
   const escapedNonce = nonce.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   assert.equal((html.match(new RegExp(`nonce="${escapedNonce}"`, "g")) ?? []).length, 3);

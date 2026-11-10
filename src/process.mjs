@@ -1,14 +1,16 @@
 import { execFileSync } from "node:child_process";
 
-export function run(command, args, { cwd, encoding = "utf8", input } = {}) {
+export function run(command, args, { cwd, encoding = "utf8", input, maxBuffer = 128 * 1024 * 1024,
+  allowedExitCodes = [0] } = {}) {
   try {
     return execFileSync(command, args, {
-      cwd, encoding, input, timeout: 120_000, maxBuffer: 128 * 1024 * 1024,
+      cwd, encoding, input, timeout: 120_000, maxBuffer,
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, GIT_PAGER: "cat", GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1", GH_PAGER: "cat" },
     });
   } catch (error) {
     if (!error || typeof error !== "object" || !("status" in error)) throw error;
+    if (error.code !== "ENOBUFS" && allowedExitCodes.includes(error.status)) return error.stdout;
     throw new Error(`${command} failed (${error.status ?? error.code}): ${
       String(error.stderr ?? error.message).trim()
     }`, { cause: error });

@@ -39,10 +39,12 @@ accidental edits, not the authenticity of the producer.
 The **change review dashboard** puts scope controls, coloured line deltas,
 miniature role bars, and collapsible commits on one compact screen, without tabs.
 Expand a role to see its file list in the same diffstat columns; expand a file
-to open its GitHub diff when available. Expand Original commits to select a
-commit and update the same overview; scope selectors keep that overview in
-place. Report comparison and search/shape filters are available in an
-expandable section when there are multiple reports or non-empty local layers.
+to load its local diff on demand or open its GitHub diff when available. The
+live canvas displays local diffs up to 256 KiB; saved reports do not embed patch
+text. Expand Original commits to select a commit and update the same overview;
+scope selectors keep that overview in place. Report comparison and search/shape
+filters are available in an expandable section when there are multiple reports
+or non-empty local layers.
 Diffstat bars use a logarithmic scale; binary sizes never enter line bars.
 Repository text uses sans serif typography, while fixed headings and counts are
 monospaced. The dashboard follows the system colour scheme and stacks in narrow

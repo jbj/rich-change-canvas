@@ -57,6 +57,24 @@ analysis is visibly unavailable, not zero. GitHub discussion totals in new
 reports include bots and do not claim verified human approvals; the curated
 study below has separate, stronger review-selection evidence.
 
+## Open the review in GitHub Copilot
+
+The project extension in `.github/extensions/rich-change-review/` opens the
+same read-only review desk as a canvas in the GitHub Copilot App. It analyzes
+the current session's repository, including committed changes and separate
+staged, unstaged, and untracked layers. The baseline is resolved from
+`origin/HEAD`; if that is not configured, the extension asks `gh` for the
+repository's default branch and uses its locally available ref. It does not
+fetch branches or execute repository code. If the default branch is not
+available locally, fetch it and reopen the canvas.
+
+For repositories without a remote, pass an explicit baseline when opening the
+canvas, for example `input: { "base": "main" }`. The project extension resolves
+the checkout from its own location, not the session's artifact directory.
+
+The canvas requires the Copilot App extension runtime and an authenticated
+`gh` installation when a usable `origin/HEAD` ref is not available.
+
 Run the analyzer, persistence, CLI, renderer, and corpus-replay tests:
 
 ```sh

@@ -33,7 +33,8 @@ test("HTML embeds untrusted data without script or template injection", () => {
   assert.equal((html.match(/<script /g) ?? []).length, 2);
   assert.match(html, /default-src 'none'/);
   const nonce = html.match(/script-src 'nonce-([^']+)'/)[1];
-  assert.equal((html.match(new RegExp(`nonce="${nonce}"`, "g")) ?? []).length, 3);
+  const escapedNonce = nonce.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  assert.equal((html.match(new RegExp(`nonce="${escapedNonce}"`, "g")) ?? []).length, 3);
   assert.throws(() => renderReports([]), /At least one/);
 });
 

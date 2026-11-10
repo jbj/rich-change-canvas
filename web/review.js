@@ -16,7 +16,8 @@
     source: "Source", test: "Tests", "test-support": "Test support",
     fixture: "Inputs", snapshot: "Snapshots", documentation: "Docs",
     manifest: "Build / deps", lockfile: "Lockfiles", generated: "Generated",
-    configuration: "Config", binary: "Binary", other: "Other",
+    configuration: "Config", markup: "Markup / styles", localization: "Translations",
+    data: "Data", binary: "Binary", other: "Other",
   };
   const count = (metric) => `+${metric.additions} / -${metric.deletions}`;
   const delta = (metric) => {
@@ -74,7 +75,7 @@
       node.append(el("span", line, className), document.createTextNode("\n"));
     }
   }
-  function loadLocalDiff(details, file, current, diffCell, diffRow, isCategoryExpanded) {
+  function loadLocalDiff(details, file, scopeKey, diffCell, diffRow, isCategoryExpanded) {
     let loaded = false;
     details.addEventListener("toggle", () => {
       diffRow.hidden = !details.open || !isCategoryExpanded();
@@ -84,7 +85,7 @@
       output.setAttribute("role", "region");
       output.setAttribute("aria-label", `Diff for ${file.path}`);
       diffCell.append(output);
-      const query = `scope=${encodeURIComponent(current.key)}&path=${encodeURIComponent(file.path)}`;
+      const query = `scope=${encodeURIComponent(scopeKey)}&path=${encodeURIComponent(file.path)}`;
       fetch(`/diff?${query}`)
         .then(async (response) => {
           const result = await response.json();
@@ -107,6 +108,13 @@
     const scope = () => {
       const report = selected();
       const key = $("scope").value;
+      if (key === "all") return {
+        key, metrics: report.allMetrics,
+        fileScopes: [
+          ...report.metrics.fileMetrics.map(() => "whole"),
+          ...report.layers.flatMap((layer) => layer.metrics.fileMetrics.map(() => layer.id)),
+        ],
+      };
       if (key === "whole") return { key, metrics: report.metrics };
       if (key.startsWith("commit:")) {
         const commit = report.commits[Number(key.slice(7))];
@@ -131,7 +139,7 @@
         $("totals").append(stat);
       }
     }
-    function fileRow(file, maximum, url, current, isCategoryExpanded) {
+    function fileRow(file, maximum, url, diffScope, isCategoryExpanded) {
       const row = el("tr", undefined, "file-row");
       row.dataset.filePath = file.path;
       row.dataset.category = file.category;
@@ -155,7 +163,7 @@
         const diffCell = el("td");
         diffCell.colSpan = 4;
         diffRow.append(diffCell);
-        loadLocalDiff(details, file, current, diffCell, diffRow, isCategoryExpanded);
+        loadLocalDiff(details, file, diffScope, diffCell, diffRow, isCategoryExpanded);
       } else {
         details.append(el("p", "Diff not included in this report.", "muted"));
       }
@@ -199,7 +207,7 @@
       const report = selected(), current = scope(), metrics = current.metrics;
       $("review-title").textContent = `${report.source.repository} / ${report.title}`;
       $("scope-note").textContent = report.layers.length ?
-        "Committed / staged / unstaged / untracked are independent snapshots. Counts are not additive." :
+        "All combines independent committed / staged / unstaged / untracked snapshots. Counts are not additive; paths may repeat." :
         "Selected scope only. Text lines and binary bytes are separate.";
       link($("commit-link"), current.url);
       totals(metrics);
@@ -226,8 +234,13 @@
         }
         categoryRow.append(nameCell, metricCell, barCell, spacerCell());
         let expanded = false;
-        const files = metrics.fileMetrics.filter((file) => file.category === key);
-        const fileRows = files.map((file) => fileRow(file, maximum, url, current, () => expanded));
+        const fileRows = metrics.fileMetrics
+          .map((file, fileIndex) => ({ file, fileIndex }))
+          .filter(({ file }) => file.category === key)
+          .map(({ file, fileIndex }) => {
+            const diffScope = current.fileScopes?.[fileIndex] ?? current.key;
+            return fileRow(file, maximum, url, diffScope, () => expanded);
+          });
         toggle.addEventListener("click", () => {
           expanded = !expanded;
           toggle.setAttribute("aria-expanded", String(expanded));
@@ -250,12 +263,13 @@
       const report = selected();
       $("scope").replaceChildren();
       const add = (value, text) => { const option = el("option", text); option.value = value; $("scope").append(option); };
+      if (report.layers.length) add("all", `All · ${report.allMetrics.files} files · ${count(report.allMetrics)}`);
       add("whole", `Committed · ${report.metrics.files} files · ${count(report.metrics)}`);
       for (const layer of report.layers) add(layer.id, `${layer.title} · ${layer.metrics.files} files · ${count(layer.metrics)}`);
       for (const [index, commit] of report.commits.entries()) add(`commit:${index}`,
         `${commit.sha.slice(0, 8)} ${commit.parentCount > 1 ? "[merge] " : ""}${commit.subject}`);
       $("scope").value = typeof key === "string" ? key :
-        !report.metrics.files ? report.layers.find((layer) => layer.metrics.files)?.id ?? "whole" : "whole";
+        report.layers.length ? "all" : "whole";
       link($("source-link"), report.source.url);
       render();
     }

@@ -74,11 +74,13 @@ study below has separate, stronger review-selection evidence.
 The project extension in `.github/extensions/rich-change-review/` opens the
 same read-only dashboard as a canvas in the GitHub Copilot App. It analyzes
 the current session's repository, including committed changes and separate
-staged, unstaged, and untracked layers. The scope selector exposes each local
-layer with its own counts; the expandable comparison also shows each non-empty
-layer as a separate row. Select a scope or row to inspect that layer, then
-expand a role to see its files. Local counts are not added to the committed
-footprint. The baseline is resolved from
+staged, unstaged, and untracked layers. With local layers present, the scope
+selector defaults to **All**, combining the committed footprint and each local
+snapshot; the committed and individual local scopes remain available. These
+snapshots are independent comparisons, so All counts can repeat paths and are
+not additive. The expandable comparison also shows each non-empty local layer
+as a separate row. Select a scope or row to inspect its files, then expand a
+role to see its file list. The baseline is resolved from
 `origin/HEAD`; if that is not configured, the extension asks `gh` for the
 repository's default branch and uses its locally available ref. It does not
 fetch branches or execute repository code. If the default branch is not
@@ -171,3 +173,16 @@ It parses source as data without importing or executing it. The checked-in
 Python and network access are not required to inspect them. Collection and the
 probe update their data files; the retained summary and written report are
 historical study artifacts and are not regenerated automatically.
+
+## Re-check file-role coverage
+
+The file-role classifier (`classify()` in `src/metrics.mjs`) is surveyed against
+every file in all 30 corpus repositories at their merge commits, not only the
+changed files. See [research/file-roles.md](research/file-roles.md) for the
+method, results, and audit.
+
+```sh
+node research/survey-files.mjs                      # fetch trees, write research/file-survey.json
+node research/compare-classifiers.mjs --base HEAD   # role transitions vs a git ref
+node research/sample-classification.mjs --size 50   # seeded stratified sample to audit by hand
+```

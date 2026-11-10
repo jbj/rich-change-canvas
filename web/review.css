@@ -86,7 +86,7 @@ label { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 1
 .role-source { --role-color: var(--blue); }
 .role-test, .role-test-support { --role-color: var(--green); }
 .role-fixture, .role-snapshot { --role-color: var(--purple); }
-.role-documentation, .role-configuration { --role-color: var(--cyan); }
+.role-documentation, .role-configuration, .role-markup, .role-localization, .role-data { --role-color: var(--cyan); }
 .role-manifest, .role-lockfile, .role-other { --role-color: var(--amber); }
 .role-generated, .role-binary { --role-color: var(--muted); }
 .count { white-space: nowrap; font-variant-numeric: tabular-nums; }

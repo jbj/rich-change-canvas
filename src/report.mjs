@@ -11,9 +11,11 @@ export function digest(value) {
 
 export function createReport({ source, title, comparison, files, commits = [], layers = [], warnings = [] }) {
   const measuredCommits = commits.map((commit) => ({ ...commit, metrics: measure(commit.files) }));
+  const allMetrics = layers.length ? measure([...files, ...layers.flatMap((layer) => layer.files)]) : null;
   const report = {
     schemaVersion: 1, analyzerVersion: ANALYZER_VERSION, source, title,
     comparison, metrics: measure(files), commits: measuredCommits,
+    ...(allMetrics ? { allMetrics } : {}),
     layers: layers.map((layer) => ({ ...layer, metrics: measure(layer.files) })),
     warnings,
     structuralAnalysis: { status: "unavailable", reason: "This baseline reports file-level evidence, not semantic equivalence or coverage." },

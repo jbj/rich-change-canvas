@@ -110,7 +110,13 @@ test("Dashboard exposes independent local layers and updates the overview withou
   assert.equal(rows[1].children[1].textContent, "+2 / -0");
   assert.equal(rows[2].children[2].textContent, "+3 / -0");
   assert.equal(rows[3].children[5].textContent, "1");
-  assert.equal(page.scope.value, "index");
+  assert.equal(report.allMetrics.files, 3);
+  assert.equal(report.allMetrics.additions, 5);
+  assert.equal(report.allMetrics.binaryFiles, 1);
+  assert.equal(page.scope.children[0].textContent, "All · 3 files · +5 / -0");
+  assert.equal(page.scope.value, "all");
+  assert.deepEqual(fileRows(page).map((row) => row.dataset.filePath).sort(),
+    ["new.bin", "src/staged.js", "test/local.test.js"]);
   rows[2].children[0].children[0].events.click();
   assert.equal(page.scope.value, "working");
   assert.equal(page.overview.hidden, false);
@@ -126,6 +132,55 @@ test("Dashboard exposes independent local layers and updates the overview withou
   page.shape.events.change();
   assert.equal(page["report-rows"].children.length, 1);
   assert.match(page["report-rows"].textContent, /Untracked/);
+});
+
+test("Renderer supplies combined metrics for previously saved local reports", () => {
+  const report = createReport({
+    source: { kind: "local", repository: "fixture" }, title: "Saved local changes",
+    comparison: { mergeBaseSha: "base", headSha: "head" },
+    files: [],
+    layers: [{ id: "working", title: "Unstaged", files: [{
+      path: "src/working.js", status: "added", additions: 2, deletions: 0, patchState: "complete",
+    }] }],
+  });
+  const olderReport = { ...report };
+  delete olderReport.allMetrics;
+  const html = renderReports([olderReport]);
+  const embedded = JSON.parse(html.match(/<script id="report-data"[^>]*>([\s\S]*?)<\/script>/)[1])[0];
+  const page = reviewPage(embedded);
+  assert.equal(page.scope.value, "all");
+  assert.match(page.totals.textContent, /\+2 \/ -0/);
+  assert.ok(fileRow(page, "src/working.js"));
+});
+
+test("All-scope duplicate file rows fetch diffs from their originating scopes", async () => {
+  const file = (additions) => ({
+    path: "src/value.js", status: "modified", additions, deletions: 1, patchState: "complete",
+  });
+  const report = createReport({
+    source: { kind: "local", repository: "fixture" }, title: "Combined local changes",
+    comparison: { mergeBaseSha: "base", headSha: "head" },
+    files: [file(1)],
+    layers: [
+      { id: "index", title: "Staged", files: [file(2)] },
+      { id: "working", title: "Unstaged", files: [file(3)] },
+    ],
+  });
+  const page = reviewPage(report);
+  categoryToggle(page, "source").events.click();
+  const rows = fileRows(page).filter((row) => row.dataset.filePath === "src/value.js");
+  assert.equal(rows.length, 3);
+  for (const row of rows) {
+    const details = row.children[0].children[0];
+    details.open = true;
+    details.events.toggle();
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.deepEqual(page.fetchRequests, [
+    "/diff?scope=whole&path=src%2Fvalue.js",
+    "/diff?scope=index&path=src%2Fvalue.js",
+    "/diff?scope=working&path=src%2Fvalue.js",
+  ]);
 });
 
 test("Single-report overview is visible immediately with details collapsed", () => {

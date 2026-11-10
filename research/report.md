@@ -136,5 +136,9 @@ Raw responses stay in the session cache, not the shareable compact dataset.
 
 Run `STUDY_CACHE=/absolute/path/outside/repo node collect.mjs` to acquire public
 data with authenticated gh. Run `node --test metrics.test.mjs`, then
-`node build.mjs` to regenerate the prototype and this report from corpus.json.
-Open preview.html directly in a browser. No packages or server are required.
+`python3 python_probe.py` (Python 3.13 or newer) to refresh the Python probe.
+The separate preview UI and builder have been retired; the corpus, summary,
+probe output, and this written report remain as study artifacts.
+`browser-validation.json` records historical checks of that retired preview.
+The current review UI is the dashboard described in the repository README.
+The retained summary and written report are not regenerated automatically.

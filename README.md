@@ -1,7 +1,7 @@
 # Rich change summaries
 
-Research and prototypes for a read-only Copilot App canvas that helps reviewers
-understand a change between a diffstat and the full diff.
+A compact, read-only Copilot App canvas and standalone dashboard that help
+reviewers understand a change between a diffstat and the full diff.
 
 The current study covers **30 merged PRs from 30 projects in six languages**,
 with **1,011 changed files and 61 individually inspectable commits**. Each sample
@@ -36,9 +36,16 @@ repository's absolute path. Treat reports from private repositories as private.
 Saved content identity is verified when saving and reopening; it detects
 accidental edits, not the authenticity of the producer.
 
-**Review desk** compares reports, **Change receipt** exposes role rules and
-per-file measurements, and **Commit trail** lets you zoom into every original
-commit. Staged, unstaged, and untracked layers are independent snapshots,
+The **change review dashboard** puts scope controls, coloured line deltas,
+miniature role bars, and commit context on one compact screen, without tabs.
+Expand files, original commits, evidence notes, or revision provenance inline.
+Role buttons filter the file receipts; select a scope or commit to update the
+same overview. Report comparison and search/shape filters are available in an
+expandable section when there are multiple reports or non-empty local layers.
+Bars use a shared scale within each group; binary sizes never enter line bars.
+The monospace layout follows the system colour scheme and stacks in narrow panels.
+
+Staged, unstaged, and untracked layers are independent snapshots,
 not part of the committed footprint. A merge's first-parent view is explicitly
 labeled merge context. Binary changes use before/after bytes, including renames;
 missing text patches remain marked incomplete. A zero-line rename still counts
@@ -60,10 +67,11 @@ study below has separate, stronger review-selection evidence.
 ## Open the review in GitHub Copilot
 
 The project extension in `.github/extensions/rich-change-review/` opens the
-same read-only review desk as a canvas in the GitHub Copilot App. It analyzes
+same read-only dashboard as a canvas in the GitHub Copilot App. It analyzes
 the current session's repository, including committed changes and separate
-staged, unstaged, and untracked layers. The review desk shows each non-empty
-local layer as its own row with counts; select a row to inspect that layer's
+staged, unstaged, and untracked layers. The scope selector exposes each local
+layer with its own counts; the expandable comparison also shows each non-empty
+layer as a separate row. Select a scope or row to inspect that layer's
 file receipts. Local counts are not added to the committed footprint. The baseline is resolved from
 `origin/HEAD`; if that is not configured, the extension asks `gh` for the
 repository's default branch and uses its locally available ref. It does not
@@ -83,21 +91,12 @@ Run the analyzer, persistence, CLI, renderer, and corpus-replay tests:
 node --test test/*.test.mjs research/metrics.test.mjs
 ```
 
-## Explore the study
+## Study data
 
-Requires Node.js 22 or newer. No packages, server, or repository code execution
-are needed.
-
-```sh
-node --test research/metrics.test.mjs
-node research/build.mjs
-open research/preview.html
-```
-
-The prototype has three linked views: **Review desk**, **Change receipt**, and
-**Commit trail**. It uses absolute added/deleted text-line counts, exposes file
-classification rules, and distinguishes final PR changes from ordinary commits
-and upstream merge context. It has no approval or merge controls.
+The separate research preview UI and builder have been retired in favour of
+the current review dashboard. The study data, probes, summary, report, and
+analyzer tests remain available. `research/browser-validation.json` records
+historical validation of the retired preview, not the current dashboard.
 
 Read [the study report](research/report.md) for all 30 PR links, findings, metric
 definitions, and limitations. The compact [corpus](research/corpus.json) contains
@@ -119,14 +118,12 @@ compact shareable corpus.
 ```sh
 STUDY_CACHE=/absolute/path/outside/the/repository node research/collect.mjs
 python3 research/python_probe.py
-node research/build.mjs
+node --test research/metrics.test.mjs
 ```
 
 `python_probe.py` needs Python 3.13 or newer and only uses the standard library.
-It parses source as data without importing or executing it. Offline generation
-uses the checked-in `python-probe.json`, so Python and network access are not
-required to explore the existing study.
-
-The prototype is not yet a registered Copilot canvas extension. SDK scaffolding,
-runtime discovery, and action routing must be verified before installation is
-claimed.
+It parses source as data without importing or executing it. The checked-in
+`python-probe.json`, corpus, and study report can be read offline;
+Python and network access are not required to inspect them. Collection and the
+probe update their data files; the retained summary and written report are
+historical study artifacts and are not regenerated automatically.

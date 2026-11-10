@@ -24,13 +24,15 @@ function sample() {
   });
 }
 
-function reviewPage(report) {
+function reviewPage(...reports) {
   class Element {
     children = [];
     value = "";
     hidden = false;
+    open = false;
     dataset = {};
     events = {};
+    attributes = {};
     constructor(tag, text = "") { this.tag = tag; this.text = text; }
     get textContent() { return this.text + this.children.map((child) => child.textContent).join(""); }
     set textContent(value) { this.text = value; this.children = []; }
@@ -38,30 +40,28 @@ function reviewPage(report) {
     append(...children) { this.children.push(...children); }
     replaceChildren(...children) { this.children = children; }
     addEventListener(name, handler) { this.events[name] = handler; }
-    setAttribute() {}
-    removeAttribute() {}
+    focus() { this.focused = true; }
+    setAttribute(name, value) { this.attributes[name] = value; }
+    removeAttribute(name) { delete this.attributes[name]; }
   }
-  const ids = [...readFileSync(new URL("../web/review.html", import.meta.url), "utf8").matchAll(/id="([^"]+)"/g)];
-  const nodes = Object.fromEntries(ids.map(([, id]) => [id, Object.assign(new Element("div"), { id })]));
-  const tabs = ["desk", "receipt", "history"].map((id) => {
-    const node = nodes[`tab-${id}`];
-    node.dataset.view = id;
-    return node;
-  });
-  nodes["report-data"].textContent = JSON.stringify([report]);
+  const ids = [...readFileSync(new URL("../web/review.html", import.meta.url), "utf8")
+    .matchAll(/<([a-z][\w-]*)\b([^>]*\bid="([^"]+)"[^>]*)>/g)];
+  const nodes = Object.fromEntries(ids.map(([, tag, attributes, id]) => [
+    id, Object.assign(new Element(tag), { id, hidden: /\bhidden\b/.test(attributes), open: /\bopen\b/.test(attributes) }),
+  ]));
+  nodes["report-data"].textContent = JSON.stringify(reports);
   const document = {
     getElementById: (id) => nodes[id],
     createElement: (tag) => new Element(tag),
+    createElementNS: (namespace, tag) => new Element(tag),
     createTextNode: (text) => new Element("#text", text),
-    querySelectorAll: (selector) => selector === "[data-view]" ? tabs :
-      ["desk", "receipt", "history"].map((id) => nodes[id]),
   };
   runInNewContext(readFileSync(new URL("../web/review.js", import.meta.url), "utf8"), { document, URL });
   assert.equal(nodes.error.textContent, "");
   return nodes;
 }
 
-test("Review desk exposes each local layer and opens its own file receipts", () => {
+test("Dashboard exposes independent local layers and updates the overview without tabs", () => {
   const file = (path, additions, binary = false) => ({
     path, status: "added", additions, deletions: 0, binary,
     beforeBytes: null, afterBytes: 4, patchState: binary ? "binary" : "complete",
@@ -86,7 +86,11 @@ test("Review desk exposes each local layer and opens its own file receipts", () 
   assert.equal(page.scope.value, "index");
   rows[2].children[0].children[0].events.click();
   assert.equal(page.scope.value, "working");
-  assert.equal(page.receipt.hidden, false);
+  assert.equal(page.overview.hidden, false);
+  assert.doesNotMatch(readFileSync(new URL("../web/review.html", import.meta.url), "utf8"), /role="tab(list|panel)?"/);
+  assert.equal(page["reports-panel"].hidden, false);
+  assert.equal(page["reports-panel"].open, false);
+  assert.match(page["scope-note"].textContent, /not additive/);
   assert.match(page["file-list"].textContent, /test\/local.test.js/);
   assert.doesNotMatch(page["file-list"].textContent, /src\/staged.js/);
   page.shape.value = "binary";
@@ -95,11 +99,124 @@ test("Review desk exposes each local layer and opens its own file receipts", () 
   assert.match(page["report-rows"].textContent, /Untracked/);
 });
 
-test("Review desk preserves committed-only reports without local rows", () => {
+test("Single-report overview is visible immediately with details collapsed", () => {
   const page = reviewPage(sample());
   assert.equal(page["report-rows"].children.length, 1);
   assert.equal(page.scope.value, "whole");
   assert.equal(page["report-rows"].children[0].children[5].textContent, "1");
+  assert.equal(page.overview.hidden, false);
+  assert.equal(page["report-control"].hidden, true);
+  assert.equal(page["reports-panel"].hidden, true);
+  for (const id of ["commits-panel", "evidence-panel", "files-panel", "provenance-panel"]) {
+    assert.equal(page[id].hidden, false);
+    assert.equal(page[id].open, false);
+  }
+  assert.match(page.totals.textContent, /\+0 \/ -0/);
+  assert.match(page["category-rows"].textContent, /4 → 9 B/);
+  assert.equal(page["category-rows"].children[0].children.some((child) => child.tag === "svg"), false);
+  assert.match(page["file-list"].textContent, /4 → 9 bytes/);
+});
+
+test("Role bars share a text-line scale, preserve zero-line renames, and open filtered receipts", () => {
+  const report = createReport({
+    source: { kind: "fixture", repository: "fixture" }, title: "Mixed scope",
+    comparison: { mergeBaseSha: "base", headSha: "head" },
+    files: [
+      { path: "src/main.js", status: "modified", additions: 30, deletions: 10, patchState: "complete" },
+      { path: "test/main.test.js", status: "modified", additions: 5, deletions: 5, patchState: "missing-or-truncated" },
+      { path: "docs/new.md", previousPath: "docs/old.md", status: "renamed", additions: 0, deletions: 0, patchState: "rename-only" },
+    ],
+    warnings: ["Acquisition warning"],
+  });
+  const page = reviewPage(report);
+  const [source, tests, docs] = page["category-rows"].children;
+  assert.equal(source.children[2].attributes["aria-label"], "Source: +30 / -10 text lines; scale 0–40");
+  assert.equal(page["line-scale"].textContent, "bars: 0–40 lines · binary: bytes");
+  assert.deepEqual(source.children[2].children.map((rect) => rect.attributes.width), ["100", "75", "25"]);
+  assert.deepEqual(tests.children[2].children.map((rect) => rect.attributes.width), ["100", "12.5", "12.5"]);
+  assert.deepEqual(docs.children[2].children.map((rect) => rect.attributes.width), ["100", "0", "0"]);
+  assert.match(page["evidence-status"].textContent, /Patches: 1 incomplete/);
+  assert.match(page["evidence-status"].textContent, /Notes: 3/);
+  assert.match(page.evidence.textContent, /Acquisition warning/);
+  assert.match(page["file-list"].textContent, /incomplete patch/);
+  tests.events.click();
+  assert.equal(page["files-panel"].open, true);
+  assert.equal(tests.attributes["aria-pressed"], "true");
+  assert.equal(source.attributes["aria-pressed"], "false");
+  assert.equal(page["file-list"].children.length, 1);
+  assert.match(page["file-list"].textContent, /test\/main.test.js/);
+  page["clear-category"].events.click();
+  assert.equal(page["file-list"].children.length, 3);
+  assert.equal(tests.attributes["aria-pressed"], "false");
+  docs.events.click();
+  assert.match(page["file-list"].textContent, /Previous path: docs\/old.md/);
+  docs.events.click();
+  assert.equal(page["file-list"].children.length, 3);
+});
+
+test("Commit selection resets the role filter and keeps final and merge history distinct", () => {
+  const file = (path, additions) => ({ path, additions, deletions: 0, status: "added", patchState: "complete" });
+  const report = createReport({
+    source: { kind: "fixture", repository: "fixture", url: "https://github.com/example/project/pull/1" },
+    title: "History",
+    comparison: { mergeBaseSha: "base", headSha: "merge" },
+    files: [file("src/main.js", 2)],
+    commits: [
+      { sha: "ordinary", parentSha: "base", parentCount: 1, subject: "Ordinary commit",
+        url: "https://github.com/example/project/commit/ordinary", files: [file("src/main.js", 4)] },
+      { sha: "merge", parentSha: "ordinary", parentCount: 2, subject: "Merge commit",
+        url: "https://github.com/example/project/commit/merge", files: [file("test/merge.test.js", 100)] },
+    ],
+  });
+  const page = reviewPage(report);
+  assert.deepEqual(page["history-totals"].children.map((row) => row.children[1].textContent), ["2 lines", "4 lines", "100 lines"]);
+  assert.deepEqual(page["history-totals"].children.map((row) => row.children[2].children[1].attributes.width), ["2", "4", "100"]);
+  page["category-rows"].children[0].events.click();
+  page["commit-list"].children[1].children[0].events.click();
+  assert.equal(page.scope.value, "commit:1");
+  assert.equal(page["clear-category"].hidden, true);
+  assert.equal(page["files-panel"].open, true);
+  assert.match(page["file-list"].textContent, /test\/merge.test.js/);
+  assert.doesNotMatch(page["file-list"].textContent, /src\/main.js/);
+  assert.equal(page["commit-list"].children[1].children[0].attributes["aria-current"], "true");
+  assert.equal(page["commit-list"].children[1].children[0].focused, true);
+  assert.match(page.comparison.textContent, /Merge context/);
+  assert.equal(page["commit-link"].href, "https://github.com/example/project/commit/merge");
+  assert.equal(page["commit-link"].hidden, false);
+  page.scope.value = "whole";
+  page.scope.events.change();
+  assert.equal(page["commit-link"].hidden, true);
+  assert.equal(page["history-totals"].children[0].children[1].textContent, "2 lines");
+});
+
+test("Multiple reports remain searchable and switching reports clears role and commit state", () => {
+  const empty = createReport({
+    source: { kind: "fixture", repository: "empty" }, title: "No changes",
+    comparison: { mergeBaseSha: "base", headSha: "base" }, files: [],
+  });
+  const page = reviewPage(sample(), empty);
+  assert.equal(page["report-control"].hidden, false);
+  assert.equal(page["reports-panel"].hidden, false);
+  page["category-rows"].children[0].events.click();
+  page.search.value = "empty";
+  page.search.events.input();
+  assert.equal(page["report-rows"].children.length, 1);
+  page["report-rows"].children[0].children[0].children[0].events.click();
+  assert.equal(page.report.value, "1");
+  assert.equal(page.scope.value, "whole");
+  assert.equal(page["clear-category"].hidden, true);
+  assert.equal(page["role-empty"].hidden, false);
+  assert.match(page["file-list"].textContent, /No changed files/);
+  assert.match(page["commit-list"].textContent, /No commits/);
+  assert.equal(page["category-rows"].children.length, 0);
+  assert.deepEqual(page["history-totals"].children.map((row) => row.children[2].children[1].attributes.width), ["0", "0", "0"]);
+  page.search.value = "no match";
+  page.search.events.input();
+  assert.equal(page.empty.hidden, false);
+  page.report.value = "0";
+  page.report.events.change();
+  assert.match(page["review-title"].textContent, /fixture/);
+  assert.equal(page["role-empty"].hidden, true);
 });
 
 test("HTML embeds untrusted data without script or template injection", () => {

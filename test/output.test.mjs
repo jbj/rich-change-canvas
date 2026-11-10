@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync, mkdirSync, copyFileSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createReport, digest, loadReport, saveReport } from "../src/report.mjs";
@@ -10,6 +10,7 @@ import { runInNewContext } from "node:vm";
 import { reportsFromCorpus } from "../src/corpus.mjs";
 import { analyzeChangedLines, analyzeSnapshot, compareSnapshots } from "../src/metric-analysis.mjs";
 import { physicalLines } from "../src/metric-plugins/text-shape.mjs";
+import { pathToFileURL } from "node:url";
 
 const cli = resolve("cli.mjs");
 function temporary(t) {
@@ -28,6 +29,10 @@ function sample() {
 }
 
 function reviewPage(...reports) {
+  return reviewHtml(renderReports(reports));
+}
+
+function reviewHtml(html) {
   const fetchRequests = [];
   class Element {
     children = [];
@@ -48,12 +53,12 @@ function reviewPage(...reports) {
     setAttribute(name, value) { this.attributes[name] = value; }
     removeAttribute(name) { delete this.attributes[name]; }
   }
-  const ids = [...readFileSync(new URL("../web/review.html", import.meta.url), "utf8")
+  const ids = [...html
     .matchAll(/<([a-z][\w-]*)\b([^>]*\bid="([^"]+)"[^>]*)>/g)];
   const nodes = Object.fromEntries(ids.map(([, tag, attributes, id]) => [
     id, Object.assign(new Element(tag), { id, hidden: /\bhidden\b/.test(attributes), open: /\bopen\b/.test(attributes) }),
   ]));
-  nodes["report-data"].textContent = JSON.stringify(reports);
+  nodes["report-data"].textContent = html.match(/<script id="report-data"[^>]*>([\s\S]*?)<\/script>/)[1];
   const document = {
     getElementById: (id) => nodes[id],
     createElement: (tag) => new Element(tag),
@@ -64,8 +69,8 @@ function reviewPage(...reports) {
     fetchRequests.push(url);
     return { ok: true, status: 200, json: async () => ({ diff: "@@ -1 +1 @@\n-value = 1\n+value = 2\n" }) };
   };
-  runInNewContext(readFileSync(new URL("../web/review.js", import.meta.url), "utf8"),
-    { document, URL, fetch, encodeURIComponent });
+  const script = html.match(/<script nonce="[^"]+">([\s\S]*?)<\/script>/)[1];
+  runInNewContext(script, { document, URL, fetch, encodeURIComponent });
   assert.equal(nodes.error.textContent, "");
   nodes.fetchRequests = fetchRequests;
   return nodes;
@@ -437,8 +442,7 @@ test("Renderer supplies combined metrics for previously saved local reports", ()
   const olderReport = { ...report };
   delete olderReport.allMetrics;
   const html = renderReports([olderReport]);
-  const embedded = JSON.parse(html.match(/<script id="report-data"[^>]*>([\s\S]*?)<\/script>/)[1])[0];
-  const page = reviewPage(embedded);
+  const page = reviewHtml(html);
   assert.equal(page.scope.value, "all");
   assert.match(page.totals.textContent, /\+2/);
   assert.doesNotMatch(page.totals.textContent, /-0/);
@@ -473,6 +477,39 @@ test("All-scope duplicate file rows fetch diffs from their originating scopes", 
     "/diff?scope=index&path=src%2Fvalue.js",
     "/diff?scope=working&path=src%2Fvalue.js",
   ]);
+});
+
+test("Loaded renderer keeps coherent assets until module reload", async (t) => {
+  const root = temporary(t);
+  mkdirSync(join(root, "web"));
+  cpSync(resolve("src"), join(root, "src"), { recursive: true });
+  for (const path of ["web/review.html", "web/review.css", "web/review.js"]) {
+    copyFileSync(resolve(path), join(root, path));
+  }
+  const moduleUrl = pathToFileURL(join(root, "src/render.mjs")).href;
+  const loaded = await import(moduleUrl);
+  const original = loaded.renderReports([sample()]);
+  const changes = [
+    ["web/review.html", "<!-- updated template -->"],
+    ["web/review.css", "/* updated style */"],
+    ["web/review.js", "// updated script"],
+  ];
+  for (const [path, marker] of changes) {
+    writeFileSync(join(root, path), `${readFileSync(join(root, path), "utf8")}\n${marker}\n`);
+  }
+  const nextReport = { ...sample(), title: "Next report" };
+  const retained = loaded.renderReports([nextReport]);
+  const fresh = await import(`${moduleUrl}?reload`);
+  const refreshed = fresh.renderReports([nextReport]);
+  for (const [, marker] of changes) {
+    assert.ok(!retained.includes(marker));
+    assert.ok(refreshed.includes(marker));
+  }
+  const nonce = (html) => html.match(/script-src 'nonce-([^']+)'/)[1];
+  assert.notEqual(nonce(original), nonce(retained));
+  assert.match(retained, /Next report/);
+  assert.match(reviewHtml(retained)["review-title"].textContent, /Next report/);
+  assert.match(reviewHtml(refreshed)["review-title"].textContent, /Next report/);
 });
 
 test("Single-report overview is visible immediately with details collapsed", () => {

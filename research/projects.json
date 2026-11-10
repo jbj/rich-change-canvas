@@ -1,0 +1,17 @@
+[
+  ["JavaScript", "prettier/prettier"], ["JavaScript", "eslint/eslint"],
+  ["JavaScript", "babel/babel"], ["JavaScript", "nodejs/node"],
+  ["JavaScript", "webpack/webpack"], ["TypeScript", "microsoft/vscode"],
+  ["TypeScript", "microsoft/TypeScript"], ["TypeScript", "typescript-eslint/typescript-eslint"],
+  ["TypeScript", "angular/angular"], ["TypeScript", "vitejs/vite"],
+  ["Python", "django/django"], ["Python", "pallets/flask"],
+  ["Python", "psf/requests"], ["Python", "pandas-dev/pandas"],
+  ["Python", "pytest-dev/pytest"], ["Go", "cli/cli"],
+  ["Go", "prometheus/prometheus"], ["Go", "gin-gonic/gin"],
+  ["Go", "go-gorm/gorm"], ["Go", "spf13/cobra"],
+  ["Rust", "rust-lang/rust"], ["Rust", "tokio-rs/tokio"],
+  ["Rust", "clap-rs/clap"], ["Rust", "serde-rs/serde"],
+  ["Rust", "rust-lang/cargo"], ["Java", "apache/kafka"],
+  ["Java", "apache/lucene"], ["Java", "junit-team/junit-framework"],
+  ["Java", "elastic/elasticsearch"], ["Java", "mockito/mockito"]
+]

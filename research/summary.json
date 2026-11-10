@@ -1,0 +1,138 @@
+{
+  "projects": 30,
+  "languages": {
+    "JavaScript": 5,
+    "TypeScript": 5,
+    "Python": 5,
+    "Go": 5,
+    "Rust": 5,
+    "Java": 5
+  },
+  "observedSourceLanguages": [
+    "Go",
+    "Java",
+    "JavaScript",
+    "Python",
+    "Rust",
+    "TypeScript"
+  ],
+  "files": 1011,
+  "commits": 61,
+  "multiCommitPRs": 14,
+  "mergeCommits": 5,
+  "humanDiscussionEntries": 23,
+  "automatedEntries": 31,
+  "sourceWithoutSeparateTestDelta": [
+    "https://github.com/eslint/eslint/pull/21505",
+    "https://github.com/angular/angular/pull/71801",
+    "https://github.com/django/django/pull/22257",
+    "https://github.com/psf/requests/pull/6966",
+    "https://github.com/pandas-dev/pandas/pull/71957",
+    "https://github.com/cli/cli/pull/14918",
+    "https://github.com/spf13/cobra/pull/2390",
+    "https://github.com/tokio-rs/tokio/pull/8750",
+    "https://github.com/clap-rs/clap/pull/6242",
+    "https://github.com/serde-rs/serde/pull/3038",
+    "https://github.com/rust-lang/cargo/pull/17706"
+  ],
+  "incompletePRFiles": [],
+  "incompleteCommitFiles": [
+    {
+      "pr": "https://github.com/vitejs/vite/pull/24012",
+      "commit": "952a83275690a48bcf1f4e29b215e627f277ea23",
+      "path": "pnpm-lock.yaml"
+    }
+  ],
+  "binaryPRFiles": [],
+  "binaryCommitFiles": [],
+  "unknownRoles": [],
+  "distinctHistory": [
+    {
+      "pr": "https://github.com/prettier/prettier/pull/20459",
+      "netPRChurn": 64,
+      "sumCommitChurn": 86,
+      "commits": 3
+    },
+    {
+      "pr": "https://github.com/microsoft/TypeScript/pull/65373",
+      "netPRChurn": 6501,
+      "sumCommitChurn": 6579,
+      "commits": 10
+    },
+    {
+      "pr": "https://github.com/typescript-eslint/typescript-eslint/pull/13117",
+      "netPRChurn": 13,
+      "sumCommitChurn": 670,
+      "commits": 3
+    },
+    {
+      "pr": "https://github.com/vitejs/vite/pull/24012",
+      "netPRChurn": 74,
+      "sumCommitChurn": 4183,
+      "commits": 5
+    },
+    {
+      "pr": "https://github.com/pandas-dev/pandas/pull/71957",
+      "netPRChurn": 19,
+      "sumCommitChurn": 29,
+      "commits": 4
+    },
+    {
+      "pr": "https://github.com/cli/cli/pull/14918",
+      "netPRChurn": 13,
+      "sumCommitChurn": 15,
+      "commits": 3
+    },
+    {
+      "pr": "https://github.com/gin-gonic/gin/pull/4852",
+      "netPRChurn": 39,
+      "sumCommitChurn": 66,
+      "commits": 2
+    },
+    {
+      "pr": "https://github.com/tokio-rs/tokio/pull/8750",
+      "netPRChurn": 89,
+      "sumCommitChurn": 95,
+      "commits": 2
+    },
+    {
+      "pr": "https://github.com/apache/kafka/pull/24140",
+      "netPRChurn": 11,
+      "sumCommitChurn": 13,
+      "commits": 2
+    },
+    {
+      "pr": "https://github.com/elastic/elasticsearch/pull/165122",
+      "netPRChurn": 14,
+      "sumCommitChurn": 25107,
+      "commits": 2
+    }
+  ],
+  "largestSourceChanges": [
+    {
+      "pr": "https://github.com/webpack/webpack/pull/23155",
+      "lines": 389,
+      "files": 14
+    },
+    {
+      "pr": "https://github.com/microsoft/TypeScript/pull/65373",
+      "lines": 340,
+      "files": 19
+    },
+    {
+      "pr": "https://github.com/pallets/flask/pull/5818",
+      "lines": 223,
+      "files": 3
+    },
+    {
+      "pr": "https://github.com/angular/angular/pull/71801",
+      "lines": 201,
+      "files": 20
+    },
+    {
+      "pr": "https://github.com/serde-rs/serde/pull/3038",
+      "lines": 185,
+      "files": 2
+    }
+  ]
+}

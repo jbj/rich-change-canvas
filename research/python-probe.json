@@ -1,0 +1,253 @@
+{
+  "analyzer": "Python stdlib ast; research probe, not a production multi-language analyzer",
+  "complexityVariant": "1 + if/for/async-for/while/conditional-expr/except + extra boolean operands + comprehensions/filters + nonwildcard match cases/guards; nested function bodies excluded",
+  "results": [
+    {
+      "pr": "https://github.com/django/django/pull/22257",
+      "path": "django/utils/dateparse.py",
+      "status": "parsed",
+      "scope": "largest modified production .py file only, not the whole PR",
+      "changedFunctions": [
+        {
+          "name": "parse_time",
+          "occurrence": 1,
+          "matching": "qualified-name-and-occurrence",
+          "before": 6,
+          "after": 6,
+          "beforeLine": 82,
+          "afterLine": 82
+        }
+      ],
+      "astEqualIgnoringDocstrings": true,
+      "note": "Ignoring docstrings does not prove behavioral equivalence: __doc__ is observable."
+    },
+    {
+      "pr": "https://github.com/pallets/flask/pull/5818",
+      "path": "src/flask/app.py",
+      "status": "parsed",
+      "scope": "largest modified production .py file only, not the whole PR",
+      "changedFunctions": [
+        {
+          "name": "Flask.__init_subclass__",
+          "occurrence": 1,
+          "matching": "unmatched-definition-count-changed",
+          "before": null,
+          "after": 10,
+          "beforeLine": null,
+          "afterLine": 253
+        },
+        {
+          "name": "Flask.dispatch_request",
+          "occurrence": 1,
+          "matching": "qualified-name-and-occurrence",
+          "before": 4,
+          "after": 4,
+          "beforeLine": 874,
+          "afterLine": 965
+        },
+        {
+          "name": "Flask.do_teardown_appcontext",
+          "occurrence": 1,
+          "matching": "qualified-name-and-occurrence",
+          "before": 2,
+          "after": 2,
+          "beforeLine": 1343,
+          "afterLine": 1432
+        },
+        {
+          "name": "Flask.do_teardown_request",
+          "occurrence": 1,
+          "matching": "qualified-name-and-occurrence",
+          "before": 4,
+          "after": 4,
+          "beforeLine": 1319,
+          "afterLine": 1408
+        },
+        {
+          "name": "Flask.finalize_request",
+          "occurrence": 1,
+          "matching": "qualified-name-and-occurrence",
+          "before": 3,
+          "after": 3,
+          "beforeLine": 918,
+          "afterLine": 1009
+        },
+        {
+          "name": "Flask.full_dispatch_request",
+          "occurrence": 1,
+          "matching": "qualified-name-and-occurrence",
+          "before": 3,
+          "after": 3,
+          "beforeLine": 900,
+          "afterLine": 991
+        },
+        {
+          "name": "Flask.handle_exception",
+          "occurrence": 1,
+          "matching": "qualified-name-and-occurrence",
+          "before": 6,
+          "after": 6,
+          "beforeLine": 806,
+          "afterLine": 896
+        },
+        {
+          "name": "Flask.handle_http_exception",
+          "occurrence": 1,
+          "matching": "qualified-name-and-occurrence",
+          "before": 4,
+          "after": 4,
+          "beforeLine": 739,
+          "afterLine": 829
+        },
+        {
+          "name": "Flask.handle_user_exception",
+          "occurrence": 1,
+          "matching": "qualified-name-and-occurrence",
+          "before": 7,
+          "after": 7,
+          "beforeLine": 774,
+          "afterLine": 864
+        },
+        {
+          "name": "Flask.log_exception",
+          "occurrence": 1,
+          "matching": "qualified-name-and-occurrence",
+          "before": 1,
+          "after": 1,
+          "beforeLine": 859,
+          "afterLine": 949
+        },
+        {
+          "name": "Flask.make_default_options_response",
+          "occurrence": 1,
+          "matching": "qualified-name-and-occurrence",
+          "before": 1,
+          "after": 1,
+          "beforeLine": 949,
+          "afterLine": 1041
+        },
+        {
+          "name": "Flask.preprocess_request",
+          "occurrence": 1,
+          "matching": "qualified-name-and-occurrence",
+          "before": 8,
+          "after": 8,
+          "beforeLine": 1263,
+          "afterLine": 1354
+        },
+        {
+          "name": "Flask.process_response",
+          "occurrence": 1,
+          "matching": "qualified-name-and-occurrence",
+          "before": 6,
+          "after": 6,
+          "beforeLine": 1291,
+          "afterLine": 1382
+        },
+        {
+          "name": "Flask.update_template_context",
+          "occurrence": 1,
+          "matching": "qualified-name-and-occurrence",
+          "before": 6,
+          "after": 5,
+          "beforeLine": 501,
+          "afterLine": 589
+        },
+        {
+          "name": "Flask.wsgi_app",
+          "occurrence": 1,
+          "matching": "qualified-name-and-occurrence",
+          "before": 6,
+          "after": 6,
+          "beforeLine": 1445,
+          "afterLine": 1536
+        },
+        {
+          "name": "add_ctx",
+          "occurrence": 1,
+          "matching": "unmatched-definition-count-changed",
+          "before": null,
+          "after": 1,
+          "beforeLine": null,
+          "afterLine": 96
+        },
+        {
+          "name": "add_ctx.wrapper",
+          "occurrence": 1,
+          "matching": "unmatched-definition-count-changed",
+          "before": null,
+          "after": 3,
+          "beforeLine": null,
+          "afterLine": 97
+        },
+        {
+          "name": "remove_ctx",
+          "occurrence": 1,
+          "matching": "unmatched-definition-count-changed",
+          "before": null,
+          "after": 1,
+          "beforeLine": null,
+          "afterLine": 84
+        },
+        {
+          "name": "remove_ctx.wrapper",
+          "occurrence": 1,
+          "matching": "unmatched-definition-count-changed",
+          "before": null,
+          "after": 3,
+          "beforeLine": null,
+          "afterLine": 85
+        }
+      ],
+      "astEqualIgnoringDocstrings": false,
+      "note": "Ignoring docstrings does not prove behavioral equivalence: __doc__ is observable."
+    },
+    {
+      "pr": "https://github.com/psf/requests/pull/6966",
+      "path": "src/requests/__version__.py",
+      "status": "parsed",
+      "scope": "largest modified production .py file only, not the whole PR",
+      "changedFunctions": [],
+      "astEqualIgnoringDocstrings": false,
+      "note": "Ignoring docstrings does not prove behavioral equivalence: __doc__ is observable."
+    },
+    {
+      "pr": "https://github.com/pandas-dev/pandas/pull/71957",
+      "path": "pandas/core/groupby/groupby.py",
+      "status": "parsed",
+      "scope": "largest modified production .py file only, not the whole PR",
+      "changedFunctions": [
+        {
+          "name": "GroupBy._set_result_index_ordered",
+          "occurrence": 1,
+          "matching": "qualified-name-and-occurrence",
+          "before": 4,
+          "after": 4,
+          "beforeLine": 994,
+          "afterLine": 994
+        }
+      ],
+      "astEqualIgnoringDocstrings": false,
+      "note": "Ignoring docstrings does not prove behavioral equivalence: __doc__ is observable."
+    },
+    {
+      "pr": "https://github.com/pytest-dev/pytest/pull/15361",
+      "path": "src/_pytest/nodes.py",
+      "status": "parsed",
+      "scope": "largest modified production .py file only, not the whole PR",
+      "changedFunctions": [
+        {
+          "name": "Collector.repr_failure",
+          "occurrence": 1,
+          "matching": "qualified-name-and-occurrence",
+          "before": 4,
+          "after": 4,
+          "beforeLine": 536,
+          "afterLine": 536
+        }
+      ],
+      "astEqualIgnoringDocstrings": false,
+      "note": "Ignoring docstrings does not prove behavioral equivalence: __doc__ is observable."
+    }
+  ]
+}

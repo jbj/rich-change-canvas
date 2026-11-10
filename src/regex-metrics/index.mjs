@@ -39,11 +39,12 @@ export const languageRules = {
   },
 };
 
-const lexical = (id, label, unit, reducer, description, measure) => ({
-  id, version: 1, label, unit, reducer, tier: "Regex heuristic", mode: "snapshot", textOnly: true,
+const lexical = (id, label, unit, reducer, description, measure, options = {}) => ({
+  id, version: 1, label, unit, reducer, tier: "Regex heuristic", mode: "diffstat", textOnly: true,
   description: `${description} Approximate: strings, comments and multiline syntax can cause false positives/negatives. Unsupported languages are excluded.`,
   supports: ({ language }) => Boolean(languageRules[language]),
   measure: (snapshot) => measure(snapshot, languageRules[snapshot.language]),
+  ...options,
 });
 function matches(text, pattern) {
   let total = 0;
@@ -53,12 +54,10 @@ function matches(text, pattern) {
 const count = (numerator) => ({ numerator, denominator: 1 });
 
 export const regexPlugins = [
-  lexical("comment-share", "Comment-looking-line share", "%", "ratio",
-    "Lines starting with # (Python) or //, /*, *, */ (other supported languages) / supported physical lines. Not parsed comment density; Python docstrings are excluded.",
-    ({ shape }, rules) => ({
-      numerator: shape.lines.filter((line) => rules.comment.test(line)).length,
-      denominator: shape.lines.length,
-    })),
+  lexical("comment-lines", "Comment-looking lines", "lines", "sum",
+    "Lines starting with # (Python) or //, /*, *, */ (other supported languages). Counts qualifying added/removed lines. Not parsed comments; Python docstrings are excluded.",
+    ({ shape }, rules) => count(shape.lines.filter((line) => rules.comment.test(line)).length),
+    { legacy: { id: "comment-share", version: 1 } }),
   lexical("decision-keywords", "Decision keywords", "occurrences", "sum",
     "if/for/while and language-specific case/catch/except/match/select, boolean operators, and JS/TS ?? occurrences. Not cyclomatic complexity; ternary punctuation is excluded.",
     ({ shape }, rules) => count(matches(shape.lines.join("\n"), rules.decisions))),

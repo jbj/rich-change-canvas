@@ -8,7 +8,8 @@ import { renderReports } from "../src/render.mjs";
 import { run } from "../src/process.mjs";
 import { runInNewContext } from "node:vm";
 import { reportsFromCorpus } from "../src/corpus.mjs";
-import { analyzeSnapshot, compareSnapshots } from "../src/metric-analysis.mjs";
+import { analyzeChangedLines, analyzeSnapshot, compareSnapshots } from "../src/metric-analysis.mjs";
+import { physicalLines } from "../src/metric-plugins/text-shape.mjs";
 
 const cli = resolve("cli.mjs");
 function temporary(t) {
@@ -92,10 +93,11 @@ function fileRows(page) {
 function metricFile(path, before, after, additions = 1) {
   return { path, status: "modified", additions, deletions: 1, patchState: "complete",
     alternativeMetrics: compareSnapshots(
-      analyzeSnapshot(Buffer.from(before), path), analyzeSnapshot(Buffer.from(after), path)) };
+      analyzeSnapshot(Buffer.from(before), path), analyzeSnapshot(Buffer.from(after), path),
+      analyzeChangedLines({ before: physicalLines(before), after: physicalLines(after) }, path)) };
 }
 
-test("Metric selection drives totals, roles and files with weighted values and neutral snapshot bars", () => {
+test("Metric selection drives absolute diffstats and retains neutral bars for snapshot metrics", () => {
   const report = createReport({
     source: { kind: "local", repository: "fixture" }, title: "Metrics",
     comparison: { mergeBaseSha: "base", headSha: "head" },
@@ -104,29 +106,35 @@ test("Metric selection drives totals, roles and files with weighted values and n
   const page = reviewPage(report);
   assert.equal(page.metric.value, "lines");
   categoryToggle(page, "source").events.click();
-  page.metric.value = "blank-share";
+  page.metric.value = "blank-lines";
   page.metric.events.change();
-  assert.match(page.totals.textContent, /0 → 50 % \(Δ \+50\)/);
-  assert.match(categoryRow(page, "source").children[1].textContent, /0 → 50/);
-  assert.match(fileRow(page, "a.js").children[1].textContent, /0 → 66.67/);
+  assert.match(page.totals.textContent, /\+2 \/ -0 lines/);
+  assert.match(categoryRow(page, "source").children[1].textContent, /\+2 \/ -0/);
+  assert.match(fileRow(page, "a.js").children[1].textContent, /\+2 \/ -0/);
   assert.equal(fileRow(page, "a.js").hidden, false);
-  assert.equal(page["value-heading"].textContent, "Before → after (Δ)");
-  assert.equal(page["line-scale"].textContent, "Linear scale · 0–100 %");
+  assert.equal(page["value-heading"].textContent, "+added / −removed");
+  assert.equal(page["line-scale"].textContent, "Log scale · max 2 lines");
   const bars = categoryRow(page, "source").children[2].children[0].children;
-  assert.deepEqual(bars.map((rect) => rect.attributes.class), ["bar-before", "bar-after"]);
-  assert.deepEqual(bars.map((rect) => rect.attributes.width), ["0", "50"]);
-  assert.deepEqual(bars.map((rect) => rect.attributes.y), ["0", "5"]);
+  assert.deepEqual(bars.map((rect) => rect.attributes.class), ["bar-track", "bar-added", "bar-deleted"]);
+  assert.deepEqual(bars.map((rect) => rect.attributes.width), ["100", "100", "0"]);
   page.metric.value = "bytes";
   page.metric.events.change();
   assert.match(page.totals.textContent, /4 → 11 B \(Δ \+7\)/);
   assert.match(categoryRow(page, "source").children[1].textContent, /4 → 11 B/);
   assert.match(page["line-scale"].textContent, /0–11 B/);
+  const snapshots = categoryRow(page, "source").children[2].children[0].children;
+  assert.deepEqual(snapshots.map((rect) => rect.attributes.class), ["bar-before", "bar-after"]);
+  assert.deepEqual(snapshots.map((rect) => rect.attributes.y), ["0", "5"]);
+  page.metric.value = "repeated-lines";
+  page.metric.events.change();
+  assert.match(page.totals.textContent, /0 → 0 lines/);
+  assert.equal(page["value-heading"].textContent, "Before → after (Δ)");
   page.metric.value = "lines";
   page.metric.events.change();
   assert.match(categoryRow(page, "source").children[1].textContent, /\+2 \/ -2/);
 });
 
-test("Churn distribution exposes file shares and scope-only concentration without snapshot deltas", () => {
+test("Text churn exposes absolute added/removed counts, including zero-line renames", () => {
   const report = createReport({
     source: { kind: "fixture", repository: "fixture" }, title: "Shares",
     comparison: {}, files: [
@@ -135,23 +143,52 @@ test("Churn distribution exposes file shares and scope-only concentration withou
     ],
   });
   const page = reviewPage(report);
-  page.metric.value = "churn-share";
+  page.metric.value = "churn";
   page.metric.events.change();
-  assert.equal(fileRow(page, "a.js").children[1].textContent, "75 %");
-  assert.equal(fileRow(page, "b.js").children[1].textContent, "25 %");
-  assert.match(page.totals.textContent, /Largest file 75% · entropy 0.81 bits/);
+  assert.equal(fileRow(page, "a.js").children[1].textContent, "+2 / -1 lines");
+  assert.equal(fileRow(page, "b.js").children[1].textContent, "+1 / -0 lines");
+  assert.match(page.totals.textContent, /\+3 \/ -1 lines/);
   assert.doesNotMatch(page.totals.textContent, /Δ|→/);
-  assert.equal(page["bar-heading"].textContent, "Share");
-  assert.match(page.totals.textContent, /concentration/);
+  assert.equal(page["bar-heading"].textContent, "Churn");
+  assert.doesNotMatch(page.totals.textContent, /%|entropy|concentration/);
   const rename = createReport({
     source: { kind: "fixture", repository: "fixture" }, title: "Rename",
     comparison: {}, files: [{ path: "new.md", previousPath: "old.md", status: "renamed", additions: 0, deletions: 0 }],
   });
   const empty = reviewPage(rename);
-  empty.metric.value = "churn-share";
+  empty.metric.value = "churn";
   empty.metric.events.change();
-  assert.match(empty.totals.textContent, /N\/A %/);
-  assert.match(empty.totals.textContent, /No changed text lines/);
+  assert.match(empty.totals.textContent, /\+0 \/ -0 lines/);
+});
+
+test("Long-line diffstats render seven added and one removed with proportional colored bars", () => {
+  const before = "x".repeat(121), added = Array.from({ length: 7 }, (_, i) => `${i}${"y".repeat(120)}`);
+  const report = createReport({
+    source: { kind: "fixture", repository: "fixture" }, title: "Long lines",
+    comparison: {}, files: [metricFile("a.js", `${before}\n`, `${added.join("\n")}\n`, 7)],
+  });
+  const page = reviewPage(report);
+  page.metric.value = "long-lines";
+  page.metric.events.change();
+  assert.match(page.totals.textContent, /\+7 \/ -1 lines/);
+  assert.doesNotMatch(page.totals.textContent, /\+6|%/);
+  assert.match(fileRow(page, "a.js").children[1].textContent, /\+7 \/ -1/);
+  const widths = categoryRow(page, "source").children[2].children[0].children.map((rect) => rect.attributes.width);
+  assert.deepEqual(widths, ["100", "87.5", "12.5"]);
+});
+
+test("Counts with unavailable patches show honest diffstat availability and known whole-file totals", () => {
+  const f = metricFile("a.js", "x\n", "\n\n");
+  delete f.alternativeMetrics["blank-lines"].changes;
+  const report = createReport({
+    source: { kind: "fixture", repository: "fixture" }, title: "No patch",
+    comparison: {}, files: [f],
+  });
+  const page = reviewPage(report);
+  page.metric.value = "blank-lines";
+  page.metric.events.change();
+  assert.match(page.totals.textContent, /\+Unavailable \/ -Unavailable lines \(whole file: 0 → 2\)/);
+  assert.match(page.totals.textContent, /changed-line evidence was not retained/);
 });
 
 test("The selected metric survives scope/report changes and missing evidence never becomes zero", () => {
@@ -170,18 +207,18 @@ test("The selected metric survives scope/report changes and missing evidence nev
   page.metric.value = "decision-keywords";
   page.metric.events.change();
   assert.match(page["metric-note"].textContent, /Regex heuristic.*Not cyclomatic/);
-  assert.match(page.totals.textContent, /0 → 1 occurrences/);
+  assert.match(page.totals.textContent, /\+1 \/ -0 occurrences/);
   page.scope.value = "commit:0";
   page.scope.events.change();
   assert.equal(page.metric.value, "decision-keywords");
-  assert.match(page.totals.textContent, /0 → 0 occurrences/);
+  assert.match(page.totals.textContent, /\+0 \/ -0 occurrences/);
   page.report.value = "1";
   page.report.events.change();
   assert.equal(page.metric.value, "decision-keywords");
   assert.match(page["metric-note"].textContent, /Archived lexical definition/);
-  assert.match(page.totals.textContent, /Unavailable → Unavailable/);
-  assert.match(page.totals.textContent, /Source was not retained/);
-  assert.doesNotMatch(page.totals.textContent, /0 → 0 occurrences/);
+  assert.match(page.totals.textContent, /\+Unavailable \/ -Unavailable/);
+  assert.match(page.totals.textContent, /changed-line evidence was not retained/);
+  assert.doesNotMatch(page.totals.textContent, /\+0 \/ -0 occurrences/);
 });
 
 test("Partial coverage is visible and content metrics retain working file diff interactions", async () => {
@@ -193,9 +230,9 @@ test("Partial coverage is visible and content metrics retain working file diff i
     ],
   });
   const page = reviewPage(report);
-  page.metric.value = "blank-share";
+  page.metric.value = "blank-lines";
   page.metric.events.change();
-  assert.match(page.totals.textContent, /100 \(partial\)/);
+  assert.match(page.totals.textContent, /\+1 \(partial\)/);
   assert.match(page.totals.textContent, /1\/2 eligible files measured; partial/);
   categoryToggle(page, "source").events.click();
   const details = fileRow(page, "a.js").children[0].children[0];
@@ -226,12 +263,36 @@ test("Renderer upgrades legacy metric availability without changing the saved re
   const embedded = JSON.parse(html.match(/<script id="report-data"[^>]*>([\s\S]*?)<\/script>/)[1])[0];
   assert.equal(embedded.id, report.id);
   const page = reviewPage(embedded);
-  page.metric.value = "blank-share";
+  page.metric.value = "blank-lines";
   page.metric.events.change();
-  assert.match(page.totals.textContent, /Unavailable → Unavailable/);
-  page.metric.value = "churn-share";
+  assert.match(page.totals.textContent, /\+Unavailable \/ -Unavailable/);
+  page.metric.value = "churn";
   page.metric.events.change();
-  assert.match(page.totals.textContent, /Largest file 100%/);
+  assert.match(page.totals.textContent, /\+1 \/ -1 lines/);
+});
+
+test("Archived share metrics display as absolute counts without mutating saved evidence", () => {
+  const report = createReport({
+    source: { kind: "fixture", repository: "fixture" }, title: "Archived shares",
+    comparison: {}, files: [{ path: "a.js", status: "modified", additions: 2, deletions: 1 }],
+  });
+  const ratio = (count, lines) => ({ numerator: count, denominator: lines, value: count / lines * 100,
+    status: "available", eligible: 1, measured: 1, reasons: [] });
+  report.metrics.fileMetrics[0].alternativeMetrics = {
+    "blank-share": { version: 1, before: ratio(3, 10), after: ratio(4, 8), delta: 20 },
+  };
+  report.metricCatalog = [{ id: "blank-share", version: 1, label: "Blank-line share", mode: "snapshot", unit: "%" }];
+  const original = JSON.stringify(report);
+  const html = renderReports([report]);
+  assert.equal(JSON.stringify(report), original);
+  const embedded = JSON.parse(html.match(/<script id="report-data"[^>]*>([\s\S]*?)<\/script>/)[1])[0];
+  assert.ok(embedded.metricCatalog.every((definition) => !definition.label.endsWith("share") && definition.unit !== "%"));
+  const page = reviewPage(embedded);
+  page.metric.value = "blank-lines";
+  page.metric.events.change();
+  assert.match(page.totals.textContent, /whole file: 3 → 4/);
+  assert.match(page.totals.textContent, /\+Unavailable \/ -Unavailable/);
+  assert.doesNotMatch(page.totals.textContent, /30 → 50|%|\+1 \/ -0/);
 });
 
 test("Dashboard exposes independent local layers and updates the overview without tabs", () => {

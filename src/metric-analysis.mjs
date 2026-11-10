@@ -1,6 +1,6 @@
 import { snapshotPlugins, changePlugins } from "./metric-plugins/index.mjs";
 import { textShape } from "./metric-plugins/text-shape.mjs";
-import { aggregateSnapshots, measured, pair, unavailable, validatePlugins } from "./metric-plugins/runner.mjs";
+import { aggregateChanges, aggregateSnapshots, measured, pair, unavailable, validatePlugins } from "./metric-plugins/runner.mjs";
 import { regexPlugins } from "./regex-metrics/index.mjs";
 import { languageForPath } from "./languages.mjs";
 import { binary } from "./process.mjs";
@@ -12,7 +12,7 @@ export const metricCatalog = [
   { id: "lines", version: 1, label: "Added / deleted text lines", unit: "lines",
     tier: "Language-independent", mode: "churn",
     description: "Added/deleted physical text lines, including blanks and comments. Binary bytes are separate." },
-  ...[...plugins, ...changePlugins].map(({ measure, supports, textOnly, ...metadata }) => metadata),
+  ...[...plugins, ...changePlugins].map(({ measure, supports, textOnly, legacy, ...metadata }) => metadata),
 ];
 
 export function analyzeSnapshot(bytes, path) {
@@ -28,9 +28,23 @@ export function analyzeSnapshot(bytes, path) {
   }));
 }
 
-export function compareSnapshots(before, after) {
+export function analyzeChangedLines(lines, beforePath, afterPath = beforePath) {
+  const snapshot = (items, path) => analyzeSnapshot(Buffer.from(items.length ? `${items.join("\n")}\n` : ""), path);
+  return { before: snapshot(lines.before, beforePath), after: snapshot(lines.after, afterPath) };
+}
+
+function missingChanges(before, after) {
+  const missing = (side) => side.status === "unsupported" ? side :
+    unavailable("missing-content", "Complete changed-line evidence was not retained; reacquire to measure additions/removals.");
+  return { additions: missing(after), deletions: missing(before) };
+}
+
+export function compareSnapshots(before, after, changed = null) {
   return Object.fromEntries(plugins.map((plugin) => [plugin.id, {
     version: plugin.version, ...pair(before[plugin.id], after[plugin.id]),
+    ...(plugin.mode === "diffstat" ? { changes: changed ? {
+      additions: changed.after[plugin.id], deletions: changed.before[plugin.id],
+    } : missingChanges(before[plugin.id], after[plugin.id]) } : {}),
   }]));
 }
 
@@ -53,22 +67,46 @@ function legacySide(plugin, file, side) {
 
 function enrichFile(file) {
   const alternatives = Object.fromEntries(plugins.map((plugin) => {
-    const saved = file.alternativeMetrics?.[plugin.id];
-    if (saved && saved.version !== plugin.version) {
-      return [plugin.id, { version: plugin.version, ...pair(
-        unavailable("missing-content", "Metric version differs; reacquire to measure."),
-        unavailable("missing-content", "Metric version differs; reacquire to measure."),
-      ) }];
+    let saved = file.alternativeMetrics?.[plugin.id];
+    const old = plugin.legacy && file.alternativeMetrics?.[plugin.legacy.id];
+    if ((!saved || saved.version !== plugin.version) && old && old.version === plugin.legacy.version) {
+      const absolute = (side) => side.measured ?
+        measured(plugin, { numerator: side.numerator, denominator: 1 }) : side;
+      saved = { version: plugin.version, ...pair(absolute(old.before), absolute(old.after)) };
     }
-    return [plugin.id, saved ?? { version: plugin.version,
-      ...pair(legacySide(plugin, file, "before"), legacySide(plugin, file, "after")) }];
+    if (saved && saved.version !== plugin.version) {
+      saved = { version: plugin.version, ...pair(
+        unavailable("missing-content", "Metric version differs; reacquire to measure."),
+        unavailable("missing-content", "Metric version differs; reacquire to measure."),
+      ) };
+    }
+    const result = saved ?? { version: plugin.version,
+      ...pair(legacySide(plugin, file, "before"), legacySide(plugin, file, "after")) };
+    if (plugin.mode === "diffstat") {
+      let changes = result.changes;
+      if (file.binary) {
+        const excluded = unavailable("unsupported", "Binary comparison has no text diff.");
+        changes = { additions: excluded, deletions: excluded };
+      } else if (!changes || !changes.additions.measured && !changes.deletions.measured) {
+        if (!file.additions && !file.deletions) {
+          const zero = (side) => side.status === "unsupported" ? side : measured(plugin, { numerator: 0, denominator: 1 });
+          changes = { additions: zero(result.after), deletions: zero(result.before) };
+        } else if (file.status === "added" || file.status === "removed") {
+          changes = { additions: result.after, deletions: result.before };
+        }
+      }
+      return [plugin.id, { ...result, changes: changes ?? missingChanges(result.before, result.after) }];
+    }
+    return [plugin.id, result];
   }));
+  for (const plugin of changePlugins) {
+    const changes = plugin.measure(file);
+    alternatives[plugin.id] = { version: plugin.version, changes: {
+      additions: measured(plugin, { numerator: changes.additions, denominator: 1 }),
+      deletions: measured(plugin, { numerator: changes.deletions, denominator: 1 }),
+    } };
+  }
   return { ...file, alternativeMetrics: alternatives };
-}
-
-function distribution(value) {
-  return { value, status: value === null ? "not-applicable" : "available",
-    reasons: value === null ? ["No changed text lines in this scope."] : [] };
 }
 
 export function addAlternativeMetrics(metrics) {
@@ -78,17 +116,10 @@ export function addAlternativeMetrics(metrics) {
     category, { ...group, alternativeMetrics: aggregateSnapshots(plugins, files.filter((file) => file.category === category)) },
   ]));
   for (const plugin of changePlugins) {
-    const result = plugin.measure(files);
-    files.forEach((file, index) => {
-      file.alternativeMetrics[plugin.id] = distribution(result.shares[index]);
-    });
     for (const [category, group] of Object.entries(categories)) {
-      const total = files.reduce((sum, file, index) =>
-        file.category === category ? sum + (result.shares[index] ?? 0) : sum, 0);
-      group.alternativeMetrics[plugin.id] = distribution(result.largestShare === null ? null : total);
+      group.alternativeMetrics[plugin.id] = { changes: aggregateChanges(plugin, files.filter((file) => file.category === category)) };
     }
-    alternatives[plugin.id] = { ...distribution(result.largestShare === null ? null : 100),
-      largestShare: result.largestShare, entropy: result.entropy };
+    alternatives[plugin.id] = { changes: aggregateChanges(plugin, files) };
   }
   return { ...metrics, fileMetrics: files, categories, alternativeMetrics: alternatives };
 }

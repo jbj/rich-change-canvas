@@ -2,7 +2,9 @@ import { readFileSync, lstatSync, readlinkSync, realpathSync } from "node:fs";
 import { resolve, relative, sep } from "node:path";
 import { run, binary } from "./process.mjs";
 import { createReport, digest } from "./report.mjs";
-import { analyzeSnapshot, compareSnapshots } from "./metric-analysis.mjs";
+import { analyzeChangedLines, analyzeSnapshot, compareSnapshots } from "./metric-analysis.mjs";
+import { changedLines } from "./metric-plugins/diff-lines.mjs";
+import { physicalLines } from "./metric-plugins/text-shape.mjs";
 
 function reference(git, ref) {
   if (typeof ref !== "string" || !ref || ref.includes("\0")) throw new Error("An explicit base reference is required");
@@ -145,6 +147,7 @@ export function analyzeLocal({ cwd = process.cwd(), base, includeWorking = false
   if (shas.length > maxCommits) throw new Error(`History has ${shas.length} commits; limit is ${maxCommits}`);
   const fingerprints = [];
   const measurements = new Map();
+  const changeMeasurements = new Map();
   function snapshot(revision, path, bytes) {
     const key = `${revision}\0${path}`;
     if (!measurements.has(key)) measurements.set(key, analyzeSnapshot(bytes, path));
@@ -181,6 +184,23 @@ export function analyzeLocal({ cwd = process.cwd(), base, includeWorking = false
       const isBinary = entry.gitBinary || (left !== null && binary(left)) || (right !== null && binary(right));
       fingerprints.push({ scope: `${before}:${after}`, path: entry.path,
         before: left === null ? null : digest(left), after: right === null ? null : digest(right) });
+      let changes = null;
+      if (!isBinary) {
+        const key = `${before}\0${after}\0${entry.path}`;
+        if (!changeMeasurements.has(key)) {
+          let lines;
+          if (state.status === "added" || state.status === "removed") {
+            lines = { before: physicalLines(left?.toString("utf8") ?? ""), after: physicalLines(right?.toString("utf8") ?? "") };
+          } else {
+            const paths = [...new Set([state.previousPath, entry.path].filter(Boolean))].map((path) => `:(literal)${path}`);
+            const patch = entry.additions || entry.deletions ? git(["diff", ...common, "--no-color", "--unified=0",
+              "--output-indicator-new=+", "--output-indicator-old=-", "--output-indicator-context= ", ...args, "--", ...paths]) : "";
+            lines = changedLines(patch, entry.additions, entry.deletions);
+          }
+          changeMeasurements.set(key, analyzeChangedLines(lines, state.previousPath ?? entry.path, entry.path));
+        }
+        changes = changeMeasurements.get(key);
+      }
       return {
         path: entry.path, previousPath: state.previousPath, status: state.status,
         additions: isBinary ? 0 : entry.additions, deletions: isBinary ? 0 : entry.deletions,
@@ -188,7 +208,7 @@ export function analyzeLocal({ cwd = process.cwd(), base, includeWorking = false
         patchState: isBinary ? "binary" : state.status === "renamed" && !entry.additions && !entry.deletions ? "rename-only" : "complete",
         alternativeMetrics: compareSnapshots(
           snapshot(before, state.previousPath ?? entry.path, left),
-          snapshot(after, entry.path, right)),
+          snapshot(after, entry.path, right), changes),
       };
     });
   }
@@ -225,7 +245,8 @@ export function analyzeLocal({ cwd = process.cwd(), base, includeWorking = false
       const lines = text ? text.split("\n").length - (text.endsWith("\n") ? 1 : 0) : 0;
       return { path, previousPath: null, status: "added", additions: lines, deletions: 0,
         binary: isBinary, beforeBytes: null, afterBytes: bytes.length, patchState: isBinary ? "binary" : "complete",
-        alternativeMetrics: compareSnapshots(analyzeSnapshot(null, path), snapshot("working", path, bytes)) };
+        alternativeMetrics: compareSnapshots(analyzeSnapshot(null, path), snapshot("working", path, bytes),
+          isBinary ? null : analyzeChangedLines({ before: [], after: physicalLines(text) }, path)) };
     });
     layers.push({ id: "untracked", title: "Untracked files (not part of HEAD)", files: untrackedFiles });
     const ending = JSON.stringify(capture());

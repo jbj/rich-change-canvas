@@ -113,6 +113,7 @@
     const metric = () => selected().metricCatalog?.find((definition) => definition.id === $("metric").value) ??
       definitions.get($("metric").value);
     const isLines = () => metric().mode === "churn";
+    const isDiffstat = () => metric().mode === "diffstat";
     const numeric = (value) => Number(value.toFixed(2)).toLocaleString("en-US");
     const number = (value) => value === null || value === undefined ? "N/A" : numeric(value);
     const evidence = (target) => target.alternativeMetrics?.[metric().id];
@@ -123,9 +124,9 @@
     }
     function availability(result) {
       if (!result) return "Metric was not measured in this report; reacquire to measure.";
-      if (metric().mode === "distribution") return result.reasons.join(" ");
-      return ["before", "after"].map((side) => {
-        const entry = result[side];
+      const entries = isDiffstat() ? result.changes : result;
+      return (isDiffstat() ? ["additions", "deletions"] : ["before", "after"]).map((side) => {
+        const entry = entries?.[side];
         if (!entry) return `${side}: unavailable`;
         return `${side}: ${entry.measured}/${entry.eligible} eligible files measured; ${entry.status}${entry.reasons.length ? `; ${entry.reasons.join(" ")}` : ""}`;
       }).join(". ");
@@ -135,8 +136,15 @@
       const result = evidence(target);
       const node = el("span", undefined, "count");
       node.setAttribute("title", availability(result));
-      if (metric().mode === "distribution") {
-        node.textContent = `${number(result?.value)} ${metric().unit}`;
+      if (isDiffstat()) {
+        node.append(el("span", `+${sideText(result?.changes?.additions)}`, "added"),
+          document.createTextNode(" / "), el("span", `-${sideText(result?.changes?.deletions)}`, "deleted"),
+          document.createTextNode(` ${metric().unit}`));
+        if ((!result?.changes?.additions?.measured || !result?.changes?.deletions?.measured) &&
+            (result?.before?.value !== null && result?.before?.value !== undefined ||
+             result?.after?.value !== null && result?.after?.value !== undefined)) {
+          node.append(el("span", ` (whole file: ${sideText(result.before)} → ${sideText(result.after)})`, "muted"));
+        }
       } else {
         const change = result?.delta;
         node.textContent = `${sideText(result?.before)} → ${sideText(result?.after)} ${metric().unit}` +
@@ -146,13 +154,17 @@
     }
     function metricBar(target, maximum, label) {
       const result = evidence(target);
+      if (isDiffstat()) {
+        return bar([[result?.changes?.additions?.value ?? 0, "bar-added"],
+          [result?.changes?.deletions?.value ?? 0, "bar-deleted"]], maximum,
+        `${label}: ${metricValue(target).textContent}; logarithmic scale 0–${number(maximum)} ${metric().unit}. ${availability(result)}`);
+      }
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       svg.setAttribute("class", "mini-bar");
       svg.setAttribute("viewBox", "0 0 100 8");
       svg.setAttribute("role", "img");
       svg.setAttribute("aria-label", `${label}: ${metricValue(target).textContent}; linear scale 0–${number(maximum)} ${metric().unit}. ${availability(result)}`);
-      const parts = metric().mode === "distribution" ? [[result?.value, "bar-share", 0, 8]] :
-        [[result?.before?.value, "bar-before", 0, 3], [result?.after?.value, "bar-after", 5, 3]];
+      const parts = [[result?.before?.value, "bar-before", 0, 3], [result?.after?.value, "bar-after", 5, 3]];
       for (const [value, className, y, height] of parts) {
         if (value === null || value === undefined) continue;
         const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -168,11 +180,12 @@
     function metricMaximum(metrics) {
       if (isLines()) return Math.max(0, ...Object.entries(metrics.categories)
         .filter(([key]) => key !== "binary").map(([, group]) => group.additions + group.deletions));
-      if (metric().unit === "%") return 100;
       let maximum = 0;
       for (const target of [...Object.values(metrics.categories), ...metrics.fileMetrics]) {
         const result = evidence(target);
-        maximum = Math.max(maximum, result?.before?.value ?? 0, result?.after?.value ?? 0);
+        maximum = isDiffstat() ? Math.max(maximum,
+          (result?.changes?.additions?.value ?? 0) + (result?.changes?.deletions?.value ?? 0)) :
+          Math.max(maximum, result?.before?.value ?? 0, result?.after?.value ?? 0);
       }
       return maximum;
     }
@@ -203,12 +216,6 @@
       if (!isLines()) {
         summary = availability(result);
         summaryLabel = "measurement coverage";
-        if (metric().mode === "distribution") {
-          summaryLabel = "concentration";
-          if (result && result.value !== null) {
-            summary = `Largest file ${number(result.largestShare)}% · entropy ${number(result.entropy)} bits`;
-          }
-        }
       }
       for (const [value, title, className] of [
         [String(metrics.files), "files", "accent"],
@@ -216,7 +223,7 @@
         [summary, summaryLabel, "muted"],
       ]) {
         const stat = el("div", undefined, "stat");
-        const valueNode = el("span", undefined, `num ${className}${["measurement coverage", "concentration"].includes(title) ? " coverage" : ""}`);
+        const valueNode = el("span", undefined, `num ${className}${title === "measurement coverage" ? " coverage" : ""}`);
         if (typeof value === "string") valueNode.textContent = value;
         else valueNode.append(value);
         stat.append(valueNode, el("span", title, "stat-label"));
@@ -306,16 +313,17 @@
       const maximum = metricMaximum(metrics);
       $("metric-heading").textContent = `/ ${metric().label}`;
       $("metric-note").textContent = `${metric().tier} · ${metric().description}` +
-        (isLines() || metric().mode === "distribution" ? "" :
+        (isDiffstat() ? " Changed-line counts, not net differences: a qualifying replacement can count on both sides." : isLines() ? "" :
           " Whole changed-file snapshots, not only edited lines. Before/after deltas are not safety or quality scores.");
       $("value-heading").textContent = isLines() ? "+added / −deleted" :
-        metric().mode === "distribution" ? "Share of scope" : "Before → after (Δ)";
-      $("bar-heading").textContent = isLines() ? "Churn" : metric().mode === "distribution" ? "Share" : "Snapshots";
-      $("legend-before").textContent = isLines() ? "+ added" : metric().mode === "distribution" ? "scope share" : "before (top)";
-      $("legend-after").textContent = isLines() ? "− deleted" : metric().mode === "distribution" ? "" : "after (bottom)";
-      $("legend-before").className = isLines() ? "added" : "snapshot-before";
-      $("legend-after").className = isLines() ? "deleted" : "snapshot-after";
+        isDiffstat() ? "+added / −removed" : "Before → after (Δ)";
+      $("bar-heading").textContent = isLines() || isDiffstat() ? "Churn" : "Snapshots";
+      $("legend-before").textContent = isLines() || isDiffstat() ? "+ added" : "before (top)";
+      $("legend-after").textContent = isLines() ? "− deleted" : isDiffstat() ? "− removed" : "after (bottom)";
+      $("legend-before").className = isLines() || isDiffstat() ? "added" : "snapshot-before";
+      $("legend-after").className = isLines() || isDiffstat() ? "deleted" : "snapshot-after";
       $("line-scale").textContent = isLines() ? `Log scale · max ${maximum} lines · binary: bytes` :
+        isDiffstat() ? `Log scale · max ${number(maximum)} ${metric().unit}` :
         `Linear scale · 0–${number(maximum)} ${metric().unit}`;
       const url = fileDiffUrl(report, current);
       for (const [key, metric] of Object.entries(metrics.categories)) {

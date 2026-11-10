@@ -1,6 +1,7 @@
 import { run, binary } from "./process.mjs";
 import { createReport } from "./report.mjs";
-import { analyzeSnapshot, compareSnapshots } from "./metric-analysis.mjs";
+import { analyzeChangedLines, analyzeSnapshot, compareSnapshots } from "./metric-analysis.mjs";
+import { changedLines } from "./metric-plugins/diff-lines.mjs";
 
 export function githubApi(endpoint) {
   return JSON.parse(run("gh", ["api", endpoint]));
@@ -76,7 +77,10 @@ export function analyzePullRequest({ repository, number, maxCommits = 250,
         patchState: isBinary ? "binary" : renameOnly ? "rename-only" : complete ? "complete" : "missing-or-truncated",
         alternativeMetrics: compareSnapshots(
           before?.metrics ?? analyzeSnapshot(null, file.previous_filename ?? file.filename),
-          after?.metrics ?? analyzeSnapshot(null, file.filename)),
+          after?.metrics ?? analyzeSnapshot(null, file.filename),
+          complete && !isBinary ? analyzeChangedLines(
+            changedLines(file.patch, file.additions, file.deletions),
+            file.previous_filename ?? file.filename, file.filename) : null),
         addedRustTestAttributes: file.filename.endsWith(".rs") ?
           lines.filter((line) => /^\+\s*#\[(?:\w+::)*test(?:\]|\()/.test(line)).length : 0,
         removedRustTestAttributes: file.filename.endsWith(".rs") ?

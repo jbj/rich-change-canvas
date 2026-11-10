@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { measure } from "./metrics.mjs";
 import { metricCatalog } from "./metric-analysis.mjs";
 
-export const ANALYZER_VERSION = "selectable-metrics-v1";
+export const ANALYZER_VERSION = "absolute-diffstat-metrics-v1";
 
 export function digest(value) {
   return createHash("sha256").update(value).digest("hex");

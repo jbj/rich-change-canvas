@@ -7,10 +7,13 @@ export function renderReports(reports) {
   if (!Array.isArray(reports) || reports.length === 0) throw new Error("At least one report is required");
   const nonce = randomBytes(18).toString("base64");
   const template = readFileSync(new URL("../web/review.html", import.meta.url), "utf8");
-  const upgrade = (metrics) => metrics.alternativeMetrics ? metrics : addAlternativeMetrics(metrics);
+  const upgrade = (metrics) => addAlternativeMetrics(metrics);
   const enrichedReports = reports.map((report) => ({
     ...report,
-    metricCatalog: report.metricCatalog ?? metricCatalog,
+    metricCatalog: metricCatalog.map((definition) => {
+      const saved = report.metricCatalog?.find((entry) => entry.id === definition.id);
+      return saved?.version === definition.version && saved.mode === definition.mode && saved.unit === definition.unit ? saved : definition;
+    }),
     metrics: upgrade(report.metrics),
     commits: report.commits.map((commit) => ({ ...commit, metrics: upgrade(commit.metrics) })),
     layers: report.layers.map((layer) => ({ ...layer, metrics: upgrade(layer.metrics) })),

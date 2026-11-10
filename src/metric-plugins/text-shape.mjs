@@ -36,32 +36,36 @@ export function textShape(text) {
   return { lines, blank, characters, maximum, long, trailing, indentation, repeated };
 }
 
-const shape = (id, label, unit, reducer, description, measure) => ({
+const shape = (id, label, unit, reducer, description, measure, options = {}) => ({
   id, version: 1, label, unit, reducer, description,
-  tier: "Language-independent", mode: "snapshot", textOnly: true, measure,
+  tier: "Language-independent", mode: "snapshot", textOnly: true, measure, ...options,
 });
 const ratio = (numerator, denominator) => ({ numerator, denominator });
 
 export const textPlugins = [
-  shape("blank-share", "Blank-line share", "%", "ratio",
-    "Whitespace-only physical lines / all physical lines. Weighted by line counts.",
-    ({ shape: s }) => ratio(s.blank, s.lines.length)),
+  shape("blank-lines", "Blank lines", "lines", "sum",
+    "Whitespace-only physical lines. Counts qualifying added and removed lines separately.",
+    ({ shape: s }) => ratio(s.blank, 1),
+    { mode: "diffstat", legacy: { id: "blank-share", version: 1 } }),
   shape("mean-line-length", "Mean line length", "code points", "mean",
     "Unicode code points per physical line, excluding LF and CRLF terminators.",
     ({ shape: s }) => ratio(s.characters, s.lines.length)),
   shape("max-line-length", "Maximum line length", "code points", "max",
     "Longest physical line in Unicode code points. Aggregates use the maximum, not a sum.",
     ({ shape: s }) => ratio(s.maximum, 1)),
-  shape("long-line-share", "Long-line share", "%", "ratio",
-    "Physical lines longer than 120 Unicode code points / all physical lines.",
-    ({ shape: s }) => ratio(s.long, s.lines.length)),
-  shape("trailing-whitespace", "Trailing-whitespace share", "%", "ratio",
-    "Physical lines ending in a space or tab / all physical lines.",
-    ({ shape: s }) => ratio(s.trailing, s.lines.length)),
+  shape("long-lines", "Long lines", "lines", "sum",
+    "Physical lines longer than 120 Unicode code points. Counts qualifying added and removed lines separately.",
+    ({ shape: s }) => ratio(s.long, 1),
+    { mode: "diffstat", legacy: { id: "long-line-share", version: 1 } }),
+  shape("trailing-whitespace", "Trailing-whitespace lines", "lines", "sum",
+    "Physical lines ending in a space or tab. Counts qualifying added and removed lines separately.",
+    ({ shape: s }) => ratio(s.trailing, 1),
+    { mode: "diffstat", version: 2, legacy: { id: "trailing-whitespace", version: 1 } }),
   shape("indentation", "Maximum textual indentation", "columns", "max",
     "Leading spaces/tabs on nonblank lines; tabs advance to four-column stops. Not syntax nesting.",
     ({ shape: s }) => ratio(s.indentation, 1)),
-  shape("repetition", "Repeated-line share", "%", "ratio",
-    "Occurrences beyond the first of trimmed nonblank lines within each file / nonblank lines. Not code-clone detection.",
-    ({ shape: s }) => ratio(s.repeated, s.lines.length - s.blank)),
+  shape("repeated-lines", "Repeated lines", "lines", "sum",
+    "Occurrences beyond the first of trimmed nonblank lines within each file. Whole-file before/after counts: repetition depends on surrounding lines, not just edits. Not code-clone detection.",
+    ({ shape: s }) => ratio(s.repeated, 1),
+    { legacy: { id: "repetition", version: 1 } }),
 ];

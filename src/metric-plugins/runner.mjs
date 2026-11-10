@@ -4,9 +4,9 @@ export function validatePlugins(plugins) {
     if (!/^[a-z][a-z0-9-]*$/.test(plugin.id) || plugin.id === "lines" || ids.has(plugin.id) ||
         !Number.isSafeInteger(plugin.version) || plugin.version < 1 ||
         typeof plugin.measure !== "function" ||
-        !["snapshot", "distribution"].includes(plugin.mode) ||
+        !["snapshot", "diffstat"].includes(plugin.mode) ||
         ![plugin.label, plugin.unit, plugin.description, plugin.tier].every((value) => typeof value === "string" && value) ||
-        plugin.mode === "snapshot" && !["sum", "max", "mean", "ratio"].includes(plugin.reducer)) {
+        !["sum", "max", "mean", "ratio"].includes(plugin.reducer)) {
       throw new Error(`Invalid or duplicate metric plugin: ${plugin.id}`);
     }
     ids.add(plugin.id);
@@ -39,8 +39,10 @@ export function measured(plugin, raw) {
 }
 
 export function aggregateSide(plugin, sides) {
-  if (!sides.length) return { ...unavailable("not-applicable", "No changed files in this scope."),
-    numerator: 0, denominator: 0 };
+  if (!sides.length) {
+    const empty = unavailable("not-applicable", "No changed files in this scope.");
+    return plugin.mode === "diffstat" ? { ...empty, status: "available", value: 0, reasons: [] } : empty;
+  }
   let numerator = 0, denominator = 0, eligible = 0, count = 0;
   const reasons = new Set();
   for (const side of sides) {
@@ -69,8 +71,16 @@ export function pair(before, after) {
 }
 
 export function aggregateSnapshots(plugins, files) {
-  return Object.fromEntries(plugins.map((plugin) => [plugin.id, pair(
-    aggregateSide(plugin, files.map((file) => file.alternativeMetrics[plugin.id].before)),
-    aggregateSide(plugin, files.map((file) => file.alternativeMetrics[plugin.id].after)),
-  )]));
+  return Object.fromEntries(plugins.map((plugin) => [plugin.id, {
+    ...pair(
+      aggregateSide(plugin, files.map((file) => file.alternativeMetrics[plugin.id].before)),
+      aggregateSide(plugin, files.map((file) => file.alternativeMetrics[plugin.id].after))),
+    ...(plugin.mode === "diffstat" ? { changes: aggregateChanges(plugin, files) } : {}),
+  }]));
+}
+
+export function aggregateChanges(plugin, files) {
+  return Object.fromEntries(["additions", "deletions"].map((direction) => [direction,
+    aggregateSide(plugin, files.map((file) => file.alternativeMetrics[plugin.id].changes[direction])),
+  ]));
 }

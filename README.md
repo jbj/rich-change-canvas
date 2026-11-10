@@ -85,55 +85,69 @@ preserve expanded roles; report/scope changes preserve the metric selection.
 Original-commit mini-bars and Compare reports remain explicitly labeled
 text-line navigation summaries.
 
-Snapshot metrics measure **whole before/after versions of changed files**, not
-only edited lines. They show before → after and signed delta; these are not
-quality scores. Their neutral bars show before on top and after underneath,
-with a shared linear scale. Percentages always use 0–100; the original LoC
-bars retain their logarithmic churn scale.
+Additive line/occurrence metrics show a **diffstat: +added / −removed**, with
+green/red bars on a shared logarithmic churn scale. These are counts of
+qualifying changed lines or occurrences, not net differences between whole-file
+totals. Replacing one long line with seven long lines shows **+7 / −1**, not
++6. Replacing a long line with a different long line shows **+1 / −1**.
+
+Bytes, averages, maxima, and repeated lines retain whole-file before → after
+values and a signed delta. Their neutral bars show before on top and after
+underneath, with a shared linear scale. Repetition depends on surrounding
+lines, so its counts cannot be measured from isolated changed lines. No metric
+is a quality score; none of the built-in metrics uses percentages.
 
 | Language-independent metric | Definition / role and scope aggregation |
 |---|---|
 | Byte size | Full blob bytes, including binary files; sum. Not compiled program size. |
-| Blank-line share | Whitespace-only physical lines / all physical lines. |
+| Blank lines | Whitespace-only physical lines added/removed. |
 | Mean line length | Unicode code points / physical lines, excluding LF/CRLF terminators; weighted mean. |
 | Maximum line length | Maximum code points on a physical line; maximum, not sum. |
-| Long-line share | Lines longer than 120 code points / physical lines. |
-| Trailing-whitespace share | Lines ending in a space or tab / physical lines. |
+| Long lines | Added/removed lines longer than 120 Unicode code points. |
+| Trailing-whitespace lines | Added/removed lines ending in a space or tab. |
 | Maximum textual indentation | Leading space/tab columns on nonblank lines; tabs advance to four-column stops. Not syntax nesting. |
-| Repeated-line share | Occurrences beyond the first of trimmed nonblank lines **within each file** / nonblank lines. Not code-clone detection. |
-| Churn share | Fraction of the selected scope's added + deleted text lines. Scope totals also show largest-file share and Shannon entropy across files, in bits. |
+| Repeated lines | Whole-file counts of occurrences beyond the first of trimmed nonblank lines **within each file**; sum. Not code-clone detection. |
+| Text churn | Absolute added/removed text lines in the selected scope, including blanks and comments. |
 
-Ratios sum numerators and denominators rather than averaging file percentages.
-Empty files have zero bytes and zero maxima, but no defined line-based ratio or
-mean. A final newline does not create an extra physical line. Empty additions
+Counts sum across files and roles; mean line length remains weighted by physical
+line counts, and maxima use the maximum rather than a sum. Empty files have zero
+bytes and zero counts/maxima, but no defined mean line length.
+A final newline does not create an extra physical line. Empty additions
 and removals use an empty snapshot for the absent side. Binary/non-UTF-8
-snapshots support bytes but not text metrics. Zero-churn renames have no defined
-churn share or concentration.
+snapshots support bytes but not text metrics. Zero-line renames have zero
+added/removed qualifying lines, even when a new language suffix changes how the
+whole-file snapshots would be interpreted.
 
 The **Regex heuristic** group supports JavaScript, TypeScript, Python, Go, Rust,
 and Java:
 
 | Regex metric | What is counted |
 |---|---|
-| Comment-looking-line share | Lines starting with Python `#` or other languages' `//`, `/*`, `*`, `*/`, divided by supported physical lines. Python docstrings are excluded. |
-| Decision keywords | `if`, `for`, `while`, language-specific `case`/`catch`/`except`/`match`/`select`, boolean operators, and JS/TS `??`. Ternary punctuation is excluded. **Not cyclomatic complexity.** |
-| Declaration-like lines | Language-specific function/type declaration patterns. JS/TS methods and arrows are excluded; Java methods require a modifier. Not an exact symbol count. |
-| Import-like lines | Import/from/use/require directives; grouped/multiline imports may count only their opening line. Not semantic coupling. |
-| Test markers | JS/TS test/it/describe calls, Python test definitions, Go Test/Benchmark/Fuzz functions, Rust test attributes, Java test annotations. Not test execution or coverage. |
+| Comment-looking lines | Added/removed lines starting with Python `#` or other languages' `//`, `/*`, `*`, `*/`. Python docstrings are excluded. |
+| Decision keywords | Added/removed `if`, `for`, `while`, language-specific `case`/`catch`/`except`/`match`/`select`, boolean operators, and JS/TS `??`. Ternary punctuation is excluded. **Not cyclomatic complexity.** |
+| Declaration-like lines | Added/removed lines matching language-specific function/type declaration patterns. JS/TS methods and arrows are excluded; Java methods require a modifier. Not an exact symbol count. |
+| Import-like lines | Added/removed import/from/use/require directives; grouped/multiline imports may count only their opening line. Not semantic coupling. |
+| Test markers | Added/removed JS/TS test/it/describe calls, Python test definitions, Go Test/Benchmark/Fuzz functions, Rust test attributes, Java test annotations. Not test execution or coverage. |
 
 These are intentionally simple regexes, not a lexer: strings, comments,
 multiline declarations, macros, and language variants can produce false
 positives and negatives. The selected metric displays its definition and
-limitations. Whole-file Rust markers are separate from the retained research
-corpus's Rust patch-line evidence.
+limitations. Full-snapshot totals are retained separately from changed-line
+counts and from the retained research corpus's Rust patch-line evidence.
 
-Coverage reports measured/eligible files independently for each side.
+Coverage reports measured/eligible files independently for additions/removals
+or before/after snapshots, as appropriate.
 Unsupported languages and binary text snapshots are excluded; missing source
 is unavailable, not zero. Partial aggregates are marked **partial**. Older
 saved reports and the retained corpus cannot recover content-based metrics
-offline: reacquire the changes for those measurements. Their known metadata
-still supports churn shares and any recorded byte sizes. Rendering an old
-report does not change its saved content or immutable identity.
+offline: reacquire the changes for those measurements. Previously saved share
+metrics migrate to absolute whole-file counts using their retained numerators.
+Those counts do **not** reconstruct added/removed lines. When complete changed
+patch lines are unavailable, the UI shows unavailable diffstat evidence and any
+known whole-file counts instead of inventing changes from the net delta.
+Known change metadata still supports absolute text churn and recorded byte
+sizes. Rendering an old report does not change its saved content or immutable
+identity.
 
 **All** still combines independent committed/staged/unstaged/untracked snapshot
 comparisons, not a reconstructed net diff. Paths and file versions can repeat;
@@ -147,15 +161,16 @@ detection, or regex-language dependencies. `index.mjs` explicitly registers
 trusted checked-in plugins; analyzed repositories cannot supply executable
 plugins. No external plugin loader or package installation is involved.
 
-Each snapshot plugin declares `id`, `version`, `label`, `unit`, `description`,
-`tier`, `mode: "snapshot"`, `textOnly`, `reducer`, and a pure `measure(snapshot)`
-function. For example, an additional nonblank-line experiment could export:
+Each content plugin declares `id`, `version`, `label`, `unit`, `description`,
+`tier`, `mode`, `textOnly`, `reducer`, and a pure `measure(snapshot)` function.
+Use `mode: "diffstat"` for additive measures that can also be evaluated on
+isolated changed lines; otherwise use `mode: "snapshot"`. For example:
 
 ```js
 export const nonblank = {
   id: "nonblank-lines", version: 1, label: "Nonblank lines", unit: "lines",
   description: "Nonblank physical lines; not statements or semantic LoC.",
-  tier: "Language-independent", mode: "snapshot", textOnly: true, reducer: "sum",
+  tier: "Language-independent", mode: "diffstat", textOnly: true, reducer: "sum",
   measure: ({ shape }) => ({
     numerator: shape.lines.length - shape.blank,
     denominator: 1,
@@ -171,9 +186,12 @@ nonnegative scalar sufficient statistics, never text or identifiers. Add
 focused fixtures in `test/metric-plugins.test.mjs`, including empty input and
 aggregation. Bump the plugin version when its definition changes. Recomputing
 with a different version marks incompatible saved evidence unavailable and
-requires reacquisition; archived results retain their saved definitions.
+requires reacquisition. Explicit `legacy` mappings can migrate old ratio
+numerators to absolute counts without claiming new changed-line evidence.
 
-`changePlugins` handles scope-relative distributions. The separate
+`changePlugins` handles absolute counts already present in change metadata.
+The pure unified-diff parser also lives in `src/metric-plugins/`; adapters supply
+patch text temporarily and only numeric measurements enter reports. The separate
 `src/regex-metrics/` provider uses the same snapshot protocol but owns its
 language rules. `src/metric-analysis.mjs` binds providers, availability,
 aggregation and serializable metadata; acquisition and the UI do not contain

@@ -95,7 +95,7 @@ label { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 1
 .bar-added { fill: var(--green); }
 .bar-deleted { fill: var(--red); }
 .bar-before { fill: var(--muted); }
-.bar-after, .bar-share { fill: var(--blue); }
+.bar-after { fill: var(--blue); }
 .snapshot-before { color: var(--muted); }
 .snapshot-after { color: var(--blue); }
 #metric-note { font-size: 10px; line-height: 15px; margin: 0 0 8px; }

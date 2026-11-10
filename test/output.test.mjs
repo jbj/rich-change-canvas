@@ -594,7 +594,7 @@ test("Single-report overview is visible immediately with details collapsed", () 
   assert.equal(fileRow(page, "asset.bin").children[0].children[0].children.some((child) => child.tag === "a"), false);
 });
 
-test("Role bars share a text-line scale with expandable file rows", () => {
+test("Role bars share a linear text-line scale with expandable file rows", () => {
   const report = createReport({
     source: { kind: "fixture", repository: "fixture" }, title: "Mixed scope",
     comparison: { mergeBaseSha: "base", headSha: "head" },
@@ -609,14 +609,14 @@ test("Role bars share a text-line scale with expandable file rows", () => {
   const source = categoryRow(page, "source");
   const tests = categoryRow(page, "test");
   const docs = categoryRow(page, "documentation");
-  assert.equal(source.children[2].children[0].attributes["aria-label"], "Source: +30 / -10 text lines; logarithmic scale 0–40");
+  assert.equal(source.children[2].children[0].attributes["aria-label"], "Source: +30 / -10 text lines; linear scale 0–40");
   assert.equal(source.children[3].className, "table-spacer");
   assert.equal(source.children[3].attributes["aria-hidden"], "true");
-  assert.equal(page["line-scale"].textContent, "Log scale · max 40 lines · binary: bytes");
+  assert.equal(page["line-scale"].textContent, "Linear scale · 0–40 lines · binary: bytes");
   assert.deepEqual(source.children[2].children[0].children.map((rect) => rect.attributes.width), ["100", "75", "25"]);
   const testBarWidths = tests.children[2].children[0].children.map((rect) => Number(rect.attributes.width));
   assert.equal(testBarWidths[0], 100);
-  assert.ok(Math.abs(testBarWidths[1] + testBarWidths[2] - Math.log1p(10) / Math.log1p(40) * 100) < 0.01);
+  assert.equal(testBarWidths[1] + testBarWidths[2], 25);
   assert.equal(docs.children[2].textContent, "");
   assert.equal(page["evidence-panel"], undefined);
   assert.equal(page["provenance-panel"], undefined);

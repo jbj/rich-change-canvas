@@ -41,7 +41,7 @@
     svg.setAttribute("aria-label", label);
     const total = parts.reduce((sum, [value]) => sum + value, 0);
     if (!total) return document.createTextNode("");
-    const scaledTotal = total && maximum ? Math.log1p(total) / Math.log1p(maximum) * 100 : 0;
+    const scaledTotal = total && maximum ? Math.min(100, total / maximum * 100) : 0;
     let offset = 0;
     for (const [value, className] of [[100, "bar-track"], ...parts]) {
       if (!value) continue;
@@ -308,7 +308,7 @@
       } else {
         metricCell.append(delta(file));
         barCell.append(bar([[file.additions, "bar-added"], [file.deletions, "bar-deleted"]],
-          maximum, `${file.path}: ${count(file)} text lines; logarithmic scale 0–${maximum}`));
+          maximum, `${file.path}: ${count(file)} text lines; linear scale 0–${maximum}`));
       }
       row.append(pathCell, metricCell, ...(barCell ? [barCell] : []), spacer);
       return { row, diffRow, details };
@@ -328,7 +328,7 @@
         const meta = el("div", undefined, "history-row");
         meta.append(el("span", `${commit.parentCount > 1 ? `Merge · ${commit.parentCount} parents` : "Commit"} · ${commit.metrics.files} files`),
           delta(commit.metrics), bar([[commit.metrics.additions, "bar-added"], [commit.metrics.deletions, "bar-deleted"]],
-            commitMaximum, `${count(commit.metrics)} text lines; logarithmic scale 0–${commitMaximum}`));
+            commitMaximum, `${count(commit.metrics)} text lines; linear scale 0–${commitMaximum}`));
         item.append(button, meta);
         $("commit-list").append(item);
       }
@@ -361,8 +361,7 @@
       $("legend-after").textContent = isLines() ? "− deleted" : isDiffstat() ? "− removed" : "after (bottom)";
       $("legend-before").className = isLines() || isDiffstat() ? "added" : "snapshot-before";
       $("legend-after").className = isLines() || isDiffstat() ? "deleted" : "snapshot-after";
-      $("line-scale").textContent = isLines() ? `Log scale · max ${maximum} lines · binary: bytes` :
-        isDiffstat() ? `Log scale · max ${number(maximum)} ${metric().unit}` :
+      $("line-scale").textContent = isLines() ? `Linear scale · 0–${maximum} lines · binary: bytes` :
         `Linear scale · 0–${number(maximum)} ${metric().unit}`;
       const url = fileDiffUrl(report, current);
       for (const [key, metric] of Object.entries(metrics.categories)) {
@@ -388,7 +387,7 @@
         } else {
           metricCell.append(delta(metric));
           barCell.append(bar([[metric.additions, "bar-added"], [metric.deletions, "bar-deleted"]],
-            maximum, `${roles[key]}: ${count(metric)} text lines; logarithmic scale 0–${maximum}`));
+            maximum, `${roles[key]}: ${count(metric)} text lines; linear scale 0–${maximum}`));
         }
         categoryRow.append(nameCell, metricCell, ...(barCell ? [barCell] : []), spacerCell());
         const fileRows = files

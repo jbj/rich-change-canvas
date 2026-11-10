@@ -37,13 +37,15 @@ Saved content identity is verified when saving and reopening; it detects
 accidental edits, not the authenticity of the producer.
 
 The **change review dashboard** puts scope controls, coloured line deltas,
-miniature role bars, and commit context on one compact screen, without tabs.
-Expand files, original commits, evidence notes, or revision provenance inline.
-Role buttons filter the file receipts; select a scope or commit to update the
-same overview. Report comparison and search/shape filters are available in an
-expandable section when there are multiple reports or non-empty local layers.
-Bars use a shared scale within each group; binary sizes never enter line bars.
-The monospace layout follows the system colour scheme and stacks in narrow panels.
+miniature role bars, and collapsible commits on one compact screen, without tabs.
+Expand files to open the corresponding GitHub diff when available, or expand
+Original commits to select a commit and update the same overview. Role buttons
+filter file receipts; scope and commit selectors keep the overview in place.
+Report comparison and search/shape filters are available in an expandable
+section when there are multiple reports or non-empty local layers. Diffstat
+bars use a logarithmic scale; binary sizes never enter line bars. Repository
+text uses sans serif typography, while fixed headings and counts are monospaced.
+The dashboard follows the system colour scheme and stacks in narrow panels.
 
 Staged, unstaged, and untracked layers are independent snapshots,
 not part of the committed footprint. A merge's first-parent view is explicitly

@@ -108,14 +108,17 @@ test("Single-report overview is visible immediately with details collapsed", () 
   assert.equal(page.overview.hidden, false);
   assert.equal(page["report-control"].hidden, true);
   assert.equal(page["reports-panel"].hidden, true);
-  for (const id of ["commits-panel", "evidence-panel", "files-panel", "provenance-panel"]) {
+  for (const id of ["commits-panel", "files-panel"]) {
     assert.equal(page[id].hidden, false);
     assert.equal(page[id].open, false);
   }
+  assert.equal(page["evidence-panel"], undefined);
+  assert.equal(page["provenance-panel"], undefined);
   assert.match(page.totals.textContent, /\+0 \/ -0/);
   assert.match(page["category-rows"].textContent, /4 → 9 B/);
   assert.equal(page["category-rows"].children[0].children.some((child) => child.tag === "svg"), false);
   assert.match(page["file-list"].textContent, /4 → 9 bytes/);
+  assert.equal(page["file-list"].children[0].children.some((child) => child.tag === "a"), false);
 });
 
 test("Role bars share a text-line scale, preserve zero-line renames, and open filtered receipts", () => {
@@ -131,15 +134,15 @@ test("Role bars share a text-line scale, preserve zero-line renames, and open fi
   });
   const page = reviewPage(report);
   const [source, tests, docs] = page["category-rows"].children;
-  assert.equal(source.children[2].attributes["aria-label"], "Source: +30 / -10 text lines; scale 0–40");
-  assert.equal(page["line-scale"].textContent, "bars: 0–40 lines · binary: bytes");
+  assert.equal(source.children[2].attributes["aria-label"], "Source: +30 / -10 text lines; logarithmic scale 0–40");
+  assert.equal(page["line-scale"].textContent, "Log scale · max 40 lines · binary: bytes");
   assert.deepEqual(source.children[2].children.map((rect) => rect.attributes.width), ["100", "75", "25"]);
-  assert.deepEqual(tests.children[2].children.map((rect) => rect.attributes.width), ["100", "12.5", "12.5"]);
+  const testBarWidths = tests.children[2].children.map((rect) => Number(rect.attributes.width));
+  assert.equal(testBarWidths[0], 100);
+  assert.ok(Math.abs(testBarWidths[1] + testBarWidths[2] - Math.log1p(10) / Math.log1p(40) * 100) < 0.01);
   assert.deepEqual(docs.children[2].children.map((rect) => rect.attributes.width), ["100", "0", "0"]);
-  assert.match(page["evidence-status"].textContent, /Patches: 1 incomplete/);
-  assert.match(page["evidence-status"].textContent, /Notes: 3/);
-  assert.match(page.evidence.textContent, /Acquisition warning/);
-  assert.match(page["file-list"].textContent, /incomplete patch/);
+  assert.equal(page["evidence-panel"], undefined);
+  assert.equal(page["provenance-panel"], undefined);
   tests.events.click();
   assert.equal(page["files-panel"].open, true);
   assert.equal(tests.attributes["aria-pressed"], "true");
@@ -170,8 +173,10 @@ test("Commit selection resets the role filter and keeps final and merge history 
     ],
   });
   const page = reviewPage(report);
-  assert.deepEqual(page["history-totals"].children.map((row) => row.children[1].textContent), ["2 lines", "4 lines", "100 lines"]);
-  assert.deepEqual(page["history-totals"].children.map((row) => row.children[2].children[1].attributes.width), ["2", "4", "100"]);
+  assert.equal(page["history-totals"], undefined);
+  assert.equal(page["files-panel"].hidden, false);
+  assert.equal(page["commits-panel"].hidden, false);
+  assert.equal(page["file-list"].children[0].children[1].href, "https://github.com/example/project/pull/1/files");
   page["category-rows"].children[0].events.click();
   page["commit-list"].children[1].children[0].events.click();
   assert.equal(page.scope.value, "commit:1");
@@ -181,13 +186,12 @@ test("Commit selection resets the role filter and keeps final and merge history 
   assert.doesNotMatch(page["file-list"].textContent, /src\/main.js/);
   assert.equal(page["commit-list"].children[1].children[0].attributes["aria-current"], "true");
   assert.equal(page["commit-list"].children[1].children[0].focused, true);
-  assert.match(page.comparison.textContent, /Merge context/);
+  assert.equal(page["file-list"].children[0].children[1].href, "https://github.com/example/project/commit/merge");
   assert.equal(page["commit-link"].href, "https://github.com/example/project/commit/merge");
   assert.equal(page["commit-link"].hidden, false);
   page.scope.value = "whole";
   page.scope.events.change();
   assert.equal(page["commit-link"].hidden, true);
-  assert.equal(page["history-totals"].children[0].children[1].textContent, "2 lines");
 });
 
 test("Multiple reports remain searchable and switching reports clears role and commit state", () => {
@@ -210,7 +214,6 @@ test("Multiple reports remain searchable and switching reports clears role and c
   assert.match(page["file-list"].textContent, /No changed files/);
   assert.match(page["commit-list"].textContent, /No commits/);
   assert.equal(page["category-rows"].children.length, 0);
-  assert.deepEqual(page["history-totals"].children.map((row) => row.children[2].children[1].attributes.width), ["0", "0", "0"]);
   page.search.value = "no match";
   page.search.events.input();
   assert.equal(page.empty.hidden, false);
@@ -283,15 +286,16 @@ test("Corpus CLI creates an offline gallery reusable by view, with navigable rea
     page.report.events.change();
     assert.equal(page["source-link"].href, reports[index].source.url);
     assert.equal(page["file-list"].children.length, reports[index].metrics.files);
-    assert.match(page.evidence.textContent, /Retained study evidence/);
+    assert.equal(page["file-list"].children[0].children.some((child) => child.tag === "a"), true);
   }
   const merge = reports.find((report) => report.source.repository === "elastic/elasticsearch");
   assert.equal(merge.metrics.churn, 14);
   const index = merge.commits.findIndex((commit) => commit.parentCount > 1);
   page["commit-list"].children[index].children[0].events.click();
-  assert.match(page.comparison.textContent, /Merge context/);
+  assert.equal(page["commit-link"].href, merge.commits[index].url);
   assert.equal(merge.commits[index].metrics.churn, 25093);
   assert.equal(page["file-list"].children.length, merge.commits[index].files.length);
+  assert.equal(page["file-list"].children[0].children[1].href, merge.commits[index].url);
   page.shape.value = "binary";
   page.shape.events.change();
   assert.equal(page.empty.hidden, false);

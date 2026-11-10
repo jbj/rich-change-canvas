@@ -31,14 +31,14 @@
 * { box-sizing: border-box; }
 body {
   margin: 0; background: var(--bg); color: var(--text);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   font-size: 12px; line-height: 18px;
 }
 main { max-width: 1280px; margin: auto; padding: 14px 18px; }
 header { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
 .eyebrow { color: var(--cyan); font-size: 11px; letter-spacing: 1px; white-space: nowrap; }
 h1 { font-size: 13px; line-height: 20px; font-weight: 600; margin: 0; overflow-wrap: anywhere; min-width: 0; }
-h2 { font-size: 12px; line-height: 18px; margin: 0 0 6px; }
+h2 { font-family: var(--font-mono, ui-monospace, SFMono-Regular, Consolas, monospace); font-size: 12px; line-height: 18px; margin: 0 0 6px; }
 h2 .muted { font-weight: 400; }
 p { margin: 6px 0; overflow-wrap: anywhere; }
 .muted, footer { color: var(--muted); }
@@ -46,8 +46,10 @@ p { margin: 6px 0; overflow-wrap: anywhere; }
 .deleted { color: var(--red); }
 .warning { color: var(--amber); }
 .accent { color: var(--cyan); }
+.eyebrow, .num, .count { font-family: var(--font-mono, ui-monospace, SFMono-Regular, Consolas, monospace); }
 .badge { color: var(--purple); white-space: nowrap; margin-left: auto; font-size: 10px; }
-a { color: var(--blue); white-space: nowrap; }
+a { color: var(--blue); text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; cursor: pointer; }
+a:hover { text-decoration-thickness: 2px; }
 button, input, select {
   font: inherit; color: var(--text); background: var(--bg);
   border: 1px solid var(--border); border-radius: 3px; padding: 3px 6px; max-width: 100%; min-width: 0;
@@ -63,7 +65,7 @@ label { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 1
 #report-control { flex: 1; }
 #scope-note { font-size: 10px; margin: 0 0 8px; }
 .panel { border: 1px solid var(--border); border-radius: 3px; padding: 8px 10px; min-width: 0; margin-bottom: 8px; }
-.dashboard { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 8px; align-items: start; }
+.dashboard { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: start; }
 .totals { display: flex; flex-wrap: wrap; gap: 8px 22px; background: var(--panel); border-block: 1px solid var(--border); padding: 8px 10px; margin: 8px 0; }
 .stat { display: flex; align-items: baseline; gap: 6px; }
 .num { font-size: 18px; line-height: 22px; font-weight: 600; }
@@ -72,8 +74,9 @@ label { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 1
 .role-head { font-size: 10px; margin-bottom: 2px; }
 .role-head > :last-child { text-align: right; }
 .role-row { border: 0; border-radius: 0; background: transparent; padding: 2px 0; text-align: left; font-size: 11px; line-height: 17px; }
-.role-name { overflow-wrap: anywhere; }
+.role-name { overflow-wrap: anywhere; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
 .role-name::before { content: "■"; margin-right: 5px; color: var(--role-color); }
+.role-row:hover .role-name { text-decoration-style: solid; }
 .role-source { --role-color: var(--blue); }
 .role-test, .role-test-support { --role-color: var(--green); }
 .role-fixture, .role-snapshot { --role-color: var(--purple); }
@@ -85,37 +88,31 @@ label { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 1
 .bar-track { fill: var(--panel); }
 .bar-added { fill: var(--green); }
 .bar-deleted { fill: var(--red); }
-.bar-final { fill: var(--cyan); }
-.bar-ordinary { fill: var(--blue); }
-.bar-merge { fill: var(--purple); }
 .legend { display: flex; flex-wrap: wrap; gap: 0 8px; font-size: 9px; line-height: 14px; margin: 6px 0 0; }
 #clear-category { margin-top: 6px; padding: 1px 5px; font-size: 10px; }
-.history-row { display: grid; grid-template-columns: minmax(0, 1fr) max-content 64px; gap: 8px; align-items: center; padding: 3px 0; }
-.compact { font-size: 10px; line-height: 15px; }
 details > summary { cursor: pointer; overflow-wrap: anywhere; }
+details > summary:hover { text-decoration: underline; text-underline-offset: 2px; }
 details[open] > summary { margin-bottom: 6px; }
 details details { padding: 5px 0; border-top: 1px solid var(--border); }
-#evidence-status { display: list-item; }
-#evidence-status span { margin-right: 12px; }
-.observation { border-left: 2px solid var(--amber); padding-left: 8px; }
+.history-row { display: grid; grid-template-columns: minmax(0, 1fr) max-content 64px; gap: 8px; align-items: center; padding: 3px 0; }
 .commit { padding: 5px 0; border-top: 1px solid var(--border); }
-.commit button { display: block; text-align: left; width: 100%; border: 0; padding: 2px; background: transparent; overflow-wrap: anywhere; }
+.commit button { display: block; text-align: left; width: 100%; border: 0; padding: 2px; background: transparent; overflow-wrap: anywhere; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
+.commit button:hover { color: var(--blue); text-decoration-style: solid; }
 .commit .history-row { padding-inline: 2px; font-size: 10px; }
 code { font: inherit; overflow-wrap: anywhere; }
 .file-name { color: var(--blue); }
 .file-meta { margin-left: 8px; color: var(--muted); font-size: 10px; }
+.file-diff { display: inline-block; margin: 2px 0 4px; }
 .table-wrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 11px; }
 th, td { padding: 4px 6px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
 th { color: var(--muted); font-weight: 400; }
-td button { padding: 0; background: transparent; border: 0; color: var(--blue); text-align: left; overflow-wrap: anywhere; }
-#comparison { overflow-wrap: anywhere; }
+td button { padding: 0; background: transparent; border: 0; color: var(--blue); text-align: left; overflow-wrap: anywhere; text-decoration: underline; text-underline-offset: 2px; }
 footer { font-size: 9px; line-height: 14px; margin-top: 8px; }
 #error { border: 1px solid var(--red); color: var(--red); padding: 8px; }
 [hidden] { display: none !important; }
 @media (max-width: 700px) {
   main { padding: 10px; }
-  .dashboard { grid-template-columns: 1fr; gap: 0; }
   header { flex-wrap: wrap; gap: 2px 8px; }
   header h1 { order: 1; flex-basis: 100%; }
   .scope-control, #report-control { flex-basis: 100%; }

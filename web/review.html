@@ -52,30 +52,14 @@
         <p class="legend"><span class="added">+ added</span> <span class="deleted">− deleted</span> <span id="line-scale" class="muted"></span></p>
         <button id="clear-category" hidden>Clear role filter</button>
       </section>
-      <section class="panel history" aria-labelledby="history-heading">
-        <h2 id="history-heading">Commit context <span class="muted">/ whole report</span></h2>
-        <div id="history-totals"></div>
-        <p class="muted compact">Final ≠ summed history. Comparisons are not additive.</p>
-        <details id="commits-panel">
-          <summary id="commits-heading">Original commits</summary>
-          <p class="muted compact">Each commit vs first parent. Merges include upstream changes and conflict resolutions.</p>
-          <div id="commit-list"></div>
-        </details>
-      </section>
     </div>
-    <details id="evidence-panel" class="panel">
-      <summary id="evidence-status"></summary>
-      <div id="evidence"></div>
-      <div id="observations"></div>
-    </details>
     <details id="files-panel" class="panel">
       <summary id="files-heading">Files</summary>
       <div id="file-list"></div>
     </details>
-    <details id="provenance-panel" class="panel">
-      <summary>Revisions <span class="muted">/ provenance &amp; limits</span></summary>
-      <div id="comparison"></div>
-      <p class="muted">Text counts include comments and blank lines. Counts are not coverage, correctness, or an approval recommendation. No separate test-file delta does not mean no tests.</p>
+    <details id="commits-panel" class="panel">
+      <summary id="commits-heading">Original commits</summary>
+      <div id="commit-list"></div>
     </details>
   </section>
   <footer>File-level evidence only · no approval score · no repository code, builds, or workflows executed</footer>

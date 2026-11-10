@@ -99,6 +99,57 @@ test("Validation rejects unsafe repository and invalid number inputs", () => {
   assert.throws(() => analyzePullRequest({ repository: "test/repo", number: 0 }), /positive integer/);
 });
 
+test("Complete patches fetch full snapshots by default and reuse scalar measurements across scopes", () => {
+  const f = fixture();
+  const before = "# private_source_sentinel\nvalue = 1\n";
+  const after = "# private_source_sentinel\nif value:\n    pass\n";
+  const api = (path) => {
+    if (!path.includes("/contents/")) return f.api(path);
+    f.calls.push(path);
+    const text = path.endsWith("ref=head") ? after : before;
+    return { type: "file", size: Buffer.byteLength(text), encoding: "base64",
+      content: Buffer.from(text).toString("base64"), sha: "blob" };
+  };
+  f.file.filename = "main.py";
+  const report = analyzePullRequest({ repository: "test/repo", number: 1, api });
+  assert.equal(f.calls.filter((path) => path.includes("/contents/")).length, 3);
+  assert.equal(f.calls.filter((path) => path.endsWith("/contents/main.py?ref=head")).length, 1);
+  assert.equal(report.metrics.alternativeMetrics["decision-keywords"].before.value, 0);
+  assert.equal(report.metrics.alternativeMetrics["decision-keywords"].after.value, 1);
+  assert.equal(report.metrics.alternativeMetrics.bytes.after.value, Buffer.byteLength(after));
+  assert.equal(report.metrics.incomplete, 0);
+  assert.doesNotMatch(JSON.stringify(report), /private_source_sentinel/);
+  assert.throws(() => analyzePullRequest({ repository: "test/repo", number: 1, api, maxBlobBytes: 2 }), /Blob size limit/);
+});
+
+test("GitHub metrics use changed patch lines rather than net snapshot count differences", () => {
+  const f = fixture();
+  const untouched = "u".repeat(121), removed = "x".repeat(121);
+  const added = Array.from({ length: 7 }, (_, index) => `${index}${"y".repeat(120)}`);
+  f.file.filename = "main.js";
+  f.file.additions = f.pr.additions = 7;
+  f.file.patch = `@@ -1,2 +1,8 @@\n ${untouched}\n-${removed}\n${added.map((line) => `+${line}`).join("\n")}`;
+  const api = (path) => {
+    if (!path.includes("/contents/")) return f.api(path);
+    const text = path.endsWith("ref=head") ? `${untouched}\n${added.join("\n")}\n` : `${untouched}\n${removed}\n`;
+    return { type: "file", size: Buffer.byteLength(text), encoding: "base64",
+      content: Buffer.from(text).toString("base64"), sha: "blob" };
+  };
+  const report = analyzePullRequest({ repository: "test/repo", number: 1, api });
+  const long = report.metrics.alternativeMetrics["long-lines"];
+  assert.equal(long.before.value, 2);
+  assert.equal(long.after.value, 8);
+  assert.equal(long.changes.additions.value, 7);
+  assert.equal(long.changes.deletions.value, 1);
+  assert.deepEqual(report.commits[0].metrics.alternativeMetrics["long-lines"], long);
+  delete f.file.patch;
+  const missing = analyzePullRequest({ repository: "test/repo", number: 1, api }).metrics.alternativeMetrics["long-lines"];
+  assert.equal(missing.before.value, 2);
+  assert.equal(missing.after.value, 8);
+  assert.equal(missing.changes.additions.status, "missing-content");
+  assert.equal(missing.changes.deletions.value, null);
+});
+
 test("All 30 acquired PRs replay through the production adapter using their metadata", () => {
   const corpus = JSON.parse(readFileSync(new URL("../research/corpus.json", import.meta.url), "utf8"));
   for (const sample of corpus.samples) {

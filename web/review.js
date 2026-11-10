@@ -196,11 +196,6 @@
     function metricBar(target, maximum, label) {
       const result = evidence(target);
       if (inapplicableMetric(target)) return document.createTextNode("");
-      if (isDiffstat()) {
-        return bar([[result?.changes?.additions?.value ?? 0, "bar-added"],
-          [result?.changes?.deletions?.value ?? 0, "bar-deleted"]], maximum,
-        `${label}: ${metricValue(target).textContent}; logarithmic scale 0–${number(maximum)} ${metric().unit}. ${availability(result)}`);
-      }
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       svg.setAttribute("class", "mini-bar");
       svg.setAttribute("viewBox", "0 0 100 8");
@@ -294,7 +289,7 @@
         diffRow.hidden = true;
         diffRow.dataset.filePath = file.path;
         const diffCell = el("td");
-        diffCell.colSpan = 4;
+        diffCell.colSpan = isDiffstat() ? 3 : 4;
         diffRow.append(diffCell);
         loadLocalDiff(details, file, diffScope, diffCell, diffRow, isCategoryExpanded);
       } else {
@@ -303,11 +298,11 @@
       const pathCell = el("td");
       pathCell.append(details);
       const metricCell = el("td");
-      const barCell = el("td");
+      const barCell = isDiffstat() ? null : el("td");
       const spacer = spacerCell();
       if (!isLines()) {
         metricCell.append(metricValue(file));
-        barCell.append(metricBar(file, maximum, file.path));
+        if (barCell) barCell.append(metricBar(file, maximum, file.path));
       } else if (file.binary) {
         metricCell.append(el("span", `${file.beforeBytes ?? 0} → ${file.afterBytes ?? 0} B`, "count"));
       } else {
@@ -315,7 +310,7 @@
         barCell.append(bar([[file.additions, "bar-added"], [file.deletions, "bar-deleted"]],
           maximum, `${file.path}: ${count(file)} text lines; logarithmic scale 0–${maximum}`));
       }
-      row.append(pathCell, metricCell, barCell, spacer);
+      row.append(pathCell, metricCell, ...(barCell ? [barCell] : []), spacer);
       return { row, diffRow, details };
     }
     function originalCommits(report) {
@@ -360,6 +355,8 @@
       $("value-heading").textContent = isLines() ? "+added / −deleted" :
         isDiffstat() ? "+added / −removed" : "Before → after (Δ)";
       $("bar-heading").textContent = isLines() || isDiffstat() ? "Churn" : "Snapshots";
+      $("bar-heading").hidden = isDiffstat();
+      $("metric-legend").hidden = isDiffstat();
       $("legend-before").textContent = isLines() || isDiffstat() ? "+ added" : "before (top)";
       $("legend-after").textContent = isLines() ? "− deleted" : isDiffstat() ? "− removed" : "after (bottom)";
       $("legend-before").className = isLines() || isDiffstat() ? "added" : "snapshot-before";
@@ -382,10 +379,10 @@
         toggle.setAttribute("aria-expanded", String(expanded));
         nameCell.append(toggle);
         const metricCell = el("td");
-        const barCell = el("td");
+        const barCell = isDiffstat() ? null : el("td");
         if (!isLines()) {
           metricCell.append(metricValue(metric));
-          barCell.append(metricBar(metric, maximum, roles[key]));
+          if (barCell) barCell.append(metricBar(metric, maximum, roles[key]));
         } else if (key === "binary") {
           metricCell.append(el("span", `${metric.beforeBytes} → ${metric.afterBytes} B`, "count"));
         } else {
@@ -393,7 +390,7 @@
           barCell.append(bar([[metric.additions, "bar-added"], [metric.deletions, "bar-deleted"]],
             maximum, `${roles[key]}: ${count(metric)} text lines; logarithmic scale 0–${maximum}`));
         }
-        categoryRow.append(nameCell, metricCell, barCell, spacerCell());
+        categoryRow.append(nameCell, metricCell, ...(barCell ? [barCell] : []), spacerCell());
         const fileRows = files
           .map(({ file, fileIndex }) => {
             const diffScope = current.fileScopes?.[fileIndex] ?? current.key;

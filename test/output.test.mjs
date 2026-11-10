@@ -102,7 +102,7 @@ function metricFile(path, before, after, additions = 1) {
       analyzeChangedLines({ before: physicalLines(before), after: physicalLines(after) }, path)) };
 }
 
-test("Metric selection drives absolute diffstats and retains neutral bars for snapshot metrics", () => {
+test("Metric selection drives absolute diffstats without bars and retains snapshot bars", () => {
   const report = createReport({
     source: { kind: "local", repository: "fixture" }, title: "Metrics",
     comparison: { mergeBaseSha: "base", headSha: "head" },
@@ -120,10 +120,10 @@ test("Metric selection drives absolute diffstats and retains neutral bars for sn
   assert.equal(categoryToggle(page, "source").textContent, "Source · 1");
   assert.equal(fileRow(page, "a.js").hidden, false);
   assert.equal(page["value-heading"].textContent, "+added / −removed");
-  assert.equal(page["line-scale"].textContent, "Log scale · max 2 lines");
-  const bars = categoryRow(page, "source").children[2].children[0].children;
-  assert.deepEqual(bars.map((rect) => rect.attributes.class), ["bar-track", "bar-added"]);
-  assert.deepEqual(bars.map((rect) => rect.attributes.width), ["100", "100"]);
+  assert.equal(categoryRow(page, "source").children.length, 3);
+  assert.equal(fileRow(page, "a.js").children.length, 3);
+  assert.equal(page["bar-heading"].hidden, true);
+  assert.equal(page["metric-legend"].hidden, true);
   page.metric.value = "bytes";
   page.metric.events.change();
   assert.match(page.totals.textContent, /4 → 11 B \(Δ \+7\)/);
@@ -132,6 +132,8 @@ test("Metric selection drives absolute diffstats and retains neutral bars for sn
   const snapshots = categoryRow(page, "source").children[2].children[0].children;
   assert.deepEqual(snapshots.map((rect) => rect.attributes.class), ["bar-before", "bar-after"]);
   assert.deepEqual(snapshots.map((rect) => rect.attributes.y), ["0", "5"]);
+  assert.equal(page["bar-heading"].hidden, false);
+  assert.equal(page["metric-legend"].hidden, false);
   page.metric.value = "repeated-lines";
   page.metric.events.change();
   assert.match(page.totals.textContent, /0 → 0 lines/);
@@ -171,7 +173,7 @@ test("Text churn exposes absolute added/removed counts, including zero-line rena
   assert.equal(categoryRow(empty, "documentation").children[1].textContent, "±0 lines");
 });
 
-test("Long-line diffstats render seven added and one removed with proportional colored bars", () => {
+test("Long-line diffstats render seven added and one removed without bars", () => {
   const before = "x".repeat(121), added = Array.from({ length: 7 }, (_, i) => `${i}${"y".repeat(120)}`);
   const report = createReport({
     source: { kind: "fixture", repository: "fixture" }, title: "Long lines",
@@ -183,8 +185,10 @@ test("Long-line diffstats render seven added and one removed with proportional c
   assert.match(page.totals.textContent, /\+7 \/ -1 lines/);
   assert.doesNotMatch(page.totals.textContent, /\+6|%/);
   assert.match(fileRow(page, "a.js").children[1].textContent, /\+7 \/ -1/);
-  const widths = categoryRow(page, "source").children[2].children[0].children.map((rect) => rect.attributes.width);
-  assert.deepEqual(widths, ["100", "87.5", "12.5"]);
+  assert.equal(categoryRow(page, "source").children.length, 3);
+  assert.equal(fileRow(page, "a.js").children.length, 3);
+  assert.equal(page["bar-heading"].hidden, true);
+  assert.equal(page["metric-legend"].hidden, true);
 });
 
 test("Diffstats omit zero sides and zero-only rows without losing expansion across metric filters", () => {

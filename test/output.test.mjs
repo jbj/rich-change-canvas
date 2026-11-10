@@ -108,15 +108,17 @@ test("Metric selection drives absolute diffstats and retains neutral bars for sn
   categoryToggle(page, "source").events.click();
   page.metric.value = "blank-lines";
   page.metric.events.change();
-  assert.match(page.totals.textContent, /\+2 \/ -0 lines/);
-  assert.match(categoryRow(page, "source").children[1].textContent, /\+2 \/ -0/);
-  assert.match(fileRow(page, "a.js").children[1].textContent, /\+2 \/ -0/);
+  assert.match(page.totals.textContent, /\+2 lines/);
+  assert.equal(categoryRow(page, "source").children[1].textContent, "+2 lines");
+  assert.equal(fileRow(page, "a.js").children[1].textContent, "+2 lines");
+  assert.equal(fileRow(page, "b.js"), undefined);
+  assert.equal(categoryToggle(page, "source").textContent, "Source · 1");
   assert.equal(fileRow(page, "a.js").hidden, false);
   assert.equal(page["value-heading"].textContent, "+added / −removed");
   assert.equal(page["line-scale"].textContent, "Log scale · max 2 lines");
   const bars = categoryRow(page, "source").children[2].children[0].children;
-  assert.deepEqual(bars.map((rect) => rect.attributes.class), ["bar-track", "bar-added", "bar-deleted"]);
-  assert.deepEqual(bars.map((rect) => rect.attributes.width), ["100", "100", "0"]);
+  assert.deepEqual(bars.map((rect) => rect.attributes.class), ["bar-track", "bar-added"]);
+  assert.deepEqual(bars.map((rect) => rect.attributes.width), ["100", "100"]);
   page.metric.value = "bytes";
   page.metric.events.change();
   assert.match(page.totals.textContent, /4 → 11 B \(Δ \+7\)/);
@@ -146,7 +148,7 @@ test("Text churn exposes absolute added/removed counts, including zero-line rena
   page.metric.value = "churn";
   page.metric.events.change();
   assert.equal(fileRow(page, "a.js").children[1].textContent, "+2 / -1 lines");
-  assert.equal(fileRow(page, "b.js").children[1].textContent, "+1 / -0 lines");
+  assert.equal(fileRow(page, "b.js").children[1].textContent, "+1 lines");
   assert.match(page.totals.textContent, /\+3 \/ -1 lines/);
   assert.doesNotMatch(page.totals.textContent, /Δ|→/);
   assert.equal(page["bar-heading"].textContent, "Churn");
@@ -158,7 +160,10 @@ test("Text churn exposes absolute added/removed counts, including zero-line rena
   const empty = reviewPage(rename);
   empty.metric.value = "churn";
   empty.metric.events.change();
-  assert.match(empty.totals.textContent, /\+0 \/ -0 lines/);
+  assert.doesNotMatch(empty.totals.textContent, /[+-]0/);
+  assert.equal(fileRow(empty, "new.md").children[1].textContent, "±0 lines");
+  assert.equal(fileRow(empty, "new.md").children[1].children[0].children[0].className, "zero");
+  assert.equal(categoryRow(empty, "documentation").children[1].textContent, "±0 lines");
 });
 
 test("Long-line diffstats render seven added and one removed with proportional colored bars", () => {
@@ -175,6 +180,82 @@ test("Long-line diffstats render seven added and one removed with proportional c
   assert.match(fileRow(page, "a.js").children[1].textContent, /\+7 \/ -1/);
   const widths = categoryRow(page, "source").children[2].children[0].children.map((rect) => rect.attributes.width);
   assert.deepEqual(widths, ["100", "87.5", "12.5"]);
+});
+
+test("Diffstats omit zero sides and zero-only rows without losing expansion across metric filters", () => {
+  const report = createReport({
+    source: { kind: "fixture", repository: "fixture" }, title: "Zeros",
+    comparison: {}, files: [
+      { ...metricFile("added.js", "", "\n".repeat(48), 48), deletions: 0 },
+      { ...metricFile("removed.js", "\n\n\n", "", 0), deletions: 3 },
+      { ...metricFile("unchanged.js", "x\n", "y\n", 0), deletions: 0 },
+      { ...metricFile("docs/zero.md", "x\n", "y\n", 0), deletions: 0 },
+    ],
+  });
+  const page = reviewPage(report);
+  for (const id of ["lines", "churn", "blank-lines"]) {
+    page.metric.value = id;
+    page.metric.events.change();
+    const added = fileRow(page, "added.js").children[1].children[0];
+    const removed = fileRow(page, "removed.js").children[1].children[0];
+    assert.equal(added.textContent, `+48${id === "lines" ? "" : " lines"}`);
+    assert.equal(added.children[0].className, "added");
+    assert.equal(removed.textContent, `-3${id === "lines" ? "" : " lines"}`);
+    assert.equal(removed.children[0].className, "deleted");
+    assert.equal(fileRow(page, "unchanged.js"), undefined);
+    assert.equal(diffRow(page, "unchanged.js"), undefined);
+    assert.equal(categoryRow(page, "documentation"), undefined);
+    assert.equal(categoryToggle(page, "source").textContent, "Source · 2");
+    assert.doesNotMatch(page.totals.textContent, /[+-]0/);
+  }
+  categoryToggle(page, "source").events.click();
+  page.metric.value = "long-lines";
+  page.metric.events.change();
+  assert.equal(page["category-rows"].children.length, 0);
+  assert.equal(page["role-empty"].hidden, false);
+  assert.equal(page["role-empty"].textContent, "No changes for this metric.");
+  assert.doesNotMatch(page.totals.textContent, /[+-]0/);
+  page.metric.value = "blank-lines";
+  page.metric.events.change();
+  assert.equal(fileRow(page, "added.js").hidden, false);
+});
+
+test("Unknown and partially measured zeros stay visible rather than becoming no-change rows", () => {
+  const report = createReport({
+    source: { kind: "fixture", repository: "fixture" }, title: "Unknown zeros",
+    comparison: {}, files: [
+      metricFile("zero.js", "x\n", "y\n"),
+      { path: "unknown.js", status: "modified", additions: 1, deletions: 1 },
+    ],
+  });
+  const page = reviewPage(report);
+  page.metric.value = "blank-lines";
+  page.metric.events.change();
+  assert.equal(fileRow(page, "zero.js"), undefined);
+  assert.ok(fileRow(page, "unknown.js"));
+  assert.match(categoryRow(page, "source").textContent, /±0 \(partial\)/);
+  assert.match(fileRow(page, "unknown.js").textContent, /Unavailable/);
+  assert.equal(page["role-empty"].hidden, true);
+});
+
+test("Zero-text commit navigation retains rename evidence with neutral ±0", () => {
+  const rename = { path: "new.js", previousPath: "old.js", status: "renamed", additions: 0, deletions: 0 };
+  const report = createReport({
+    source: { kind: "fixture", repository: "fixture" }, title: "Rename",
+    comparison: {}, files: [rename],
+    commits: [{ sha: "rename", parentCount: 1, subject: "Rename only", files: [rename] }],
+  });
+  const page = reviewPage(report);
+  assert.match(page["commit-list"].textContent, /Rename only/);
+  assert.match(page["commit-list"].textContent, /±0/);
+  assert.doesNotMatch(page["commit-list"].textContent, /[+-]0/);
+  assert.doesNotMatch(page["report-rows"].textContent, /[+-]0/);
+  page["commit-list"].children[0].children[0].events.click();
+  assert.equal(page.scope.value, "commit:0");
+  categoryToggle(page, "source").events.click();
+  assert.equal(fileRow(page, "new.js").children[1].textContent, "±0");
+  assert.equal(fileRow(page, "new.js").children[1].children[0].children[0].className, "zero");
+  assert.match(fileRow(page, "new.js").textContent, /Previous path: old.js/);
 });
 
 test("Counts with unavailable patches show honest diffstat availability and known whole-file totals", () => {
@@ -207,18 +288,20 @@ test("The selected metric survives scope/report changes and missing evidence nev
   page.metric.value = "decision-keywords";
   page.metric.events.change();
   assert.match(page["metric-note"].textContent, /Regex heuristic.*Not cyclomatic/);
-  assert.match(page.totals.textContent, /\+1 \/ -0 occurrences/);
+  assert.match(page.totals.textContent, /\+1 occurrences/);
   page.scope.value = "commit:0";
   page.scope.events.change();
   assert.equal(page.metric.value, "decision-keywords");
-  assert.match(page.totals.textContent, /\+0 \/ -0 occurrences/);
+  assert.doesNotMatch(page.totals.textContent, /[+-]0/);
+  assert.equal(fileRows(page).length, 0);
+  assert.equal(page["role-empty"].hidden, false);
   page.report.value = "1";
   page.report.events.change();
   assert.equal(page.metric.value, "decision-keywords");
   assert.match(page["metric-note"].textContent, /Archived lexical definition/);
   assert.match(page.totals.textContent, /\+Unavailable \/ -Unavailable/);
   assert.match(page.totals.textContent, /changed-line evidence was not retained/);
-  assert.doesNotMatch(page.totals.textContent, /\+0 \/ -0 occurrences/);
+  assert.doesNotMatch(page.totals.textContent, /±0/);
 });
 
 test("Partial coverage is visible and content metrics retain working file diff interactions", async () => {
@@ -292,7 +375,7 @@ test("Archived share metrics display as absolute counts without mutating saved e
   page.metric.events.change();
   assert.match(page.totals.textContent, /whole file: 3 → 4/);
   assert.match(page.totals.textContent, /\+Unavailable \/ -Unavailable/);
-  assert.doesNotMatch(page.totals.textContent, /30 → 50|%|\+1 \/ -0/);
+  assert.doesNotMatch(page.totals.textContent, /30 → 50|%|\+1/);
 });
 
 test("Dashboard exposes independent local layers and updates the overview without tabs", () => {
@@ -312,19 +395,20 @@ test("Dashboard exposes independent local layers and updates the overview withou
   });
   const page = reviewPage(report);
   const rows = page["report-rows"].children;
-  assert.equal(rows.length, 4);
-  assert.equal(rows[0].children[1].textContent, "+0 / -0");
-  assert.equal(rows[1].children[1].textContent, "+2 / -0");
-  assert.equal(rows[2].children[2].textContent, "+3 / -0");
-  assert.equal(rows[3].children[5].textContent, "1");
+  assert.equal(rows.length, 3);
+  assert.equal(rows[0].children[1].textContent, "+2");
+  assert.equal(rows[0].children[2].textContent, "±0");
+  assert.equal(rows[1].children[2].textContent, "+3");
+  assert.equal(rows[2].children[5].textContent, "1");
   assert.equal(report.allMetrics.files, 3);
   assert.equal(report.allMetrics.additions, 5);
   assert.equal(report.allMetrics.binaryFiles, 1);
-  assert.equal(page.scope.children[0].textContent, "All · 3 files · +5 / -0");
+  assert.equal(page.scope.children[0].textContent, "All · 3 files · +5");
+  assert.equal(page.scope.children[1].textContent, "Committed · 0 files");
   assert.equal(page.scope.value, "all");
   assert.deepEqual(fileRows(page).map((row) => row.dataset.filePath).sort(),
     ["new.bin", "src/staged.js", "test/local.test.js"]);
-  rows[2].children[0].children[0].events.click();
+  rows[1].children[0].children[0].events.click();
   assert.equal(page.scope.value, "working");
   assert.equal(page.overview.hidden, false);
   assert.doesNotMatch(readFileSync(new URL("../web/review.html", import.meta.url), "utf8"), /role="tab(list|panel)?"/);
@@ -356,7 +440,8 @@ test("Renderer supplies combined metrics for previously saved local reports", ()
   const embedded = JSON.parse(html.match(/<script id="report-data"[^>]*>([\s\S]*?)<\/script>/)[1])[0];
   const page = reviewPage(embedded);
   assert.equal(page.scope.value, "all");
-  assert.match(page.totals.textContent, /\+2 \/ -0/);
+  assert.match(page.totals.textContent, /\+2/);
+  assert.doesNotMatch(page.totals.textContent, /-0/);
   assert.ok(fileRow(page, "src/working.js"));
 });
 
@@ -403,7 +488,7 @@ test("Single-report overview is visible immediately with details collapsed", () 
     assert.equal(page[id].open, false);
   }
   assert.equal(page["files-panel"], undefined);
-  assert.match(page.totals.textContent, /\+0 \/ -0/);
+  assert.doesNotMatch(page.totals.textContent, /[+-]0/);
   assert.equal(page.totals.children.length, 3);
   assert.doesNotMatch(page.totals.textContent, /largest file/i);
   assert.match(categoryRow(page, "binary").textContent, /4 → 9 B/);
@@ -434,7 +519,7 @@ test("Role bars share a text-line scale with expandable file rows", () => {
   const testBarWidths = tests.children[2].children[0].children.map((rect) => Number(rect.attributes.width));
   assert.equal(testBarWidths[0], 100);
   assert.ok(Math.abs(testBarWidths[1] + testBarWidths[2] - Math.log1p(10) / Math.log1p(40) * 100) < 0.01);
-  assert.deepEqual(docs.children[2].children[0].children.map((rect) => rect.attributes.width), ["100", "0", "0"]);
+  assert.equal(docs.children[2].textContent, "");
   assert.equal(page["evidence-panel"], undefined);
   assert.equal(page["provenance-panel"], undefined);
   const testFile = fileRow(page, "test/main.test.js");
@@ -540,8 +625,10 @@ test("Multiple reports remain searchable and switching reports clears expanded g
   categoryToggle(page, "binary").events.click();
   page.search.value = "empty";
   page.search.events.input();
-  assert.equal(page["report-rows"].children.length, 1);
-  page["report-rows"].children[0].children[0].children[0].events.click();
+  assert.equal(page["report-rows"].children.length, 0);
+  assert.equal(page.empty.hidden, false);
+  page.report.value = "1";
+  page.report.events.change();
   assert.equal(page.report.value, "1");
   assert.equal(page.scope.value, "whole");
   assert.equal(page["role-empty"].hidden, false);

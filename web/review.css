@@ -44,6 +44,7 @@ p { margin: 6px 0; overflow-wrap: anywhere; }
 .muted, footer { color: var(--muted); }
 .added { color: var(--green); }
 .deleted { color: var(--red); }
+.zero { color: var(--text); }
 .warning { color: var(--amber); }
 .accent { color: var(--cyan); }
 .eyebrow, .num, .count { font-family: var(--font-mono, ui-monospace, SFMono-Regular, Consolas, monospace); }

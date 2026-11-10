@@ -90,6 +90,12 @@ green/red bars on a shared logarithmic churn scale. These are counts of
 qualifying changed lines or occurrences, not net differences between whole-file
 totals. Replacing one long line with seven long lines shows **+7 / −1**, not
 +6. Replacing a long line with a different long line shows **+1 / −1**.
+Zero sides are omitted: **+48** instead of +48 / −0. Fully measured zero-only
+file and role rows are hidden for the selected diffstat metric. Binary and
+rename/copy-only changes remain visible in the text-line/churn views with
+neutral **±0** instead of +0 / −0. Summaries also use ±0 for zero totals.
+Unavailable or partial measurements are never hidden as measured zeros.
+Commit navigation stays available even when a commit has no text-line changes.
 
 Bytes, averages, maxima, and repeated lines retain whole-file before → after
 values and a signed delta. Their neutral bars show before on top and after

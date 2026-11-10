@@ -37,13 +37,18 @@ Saved content identity is verified when saving and reopening; it detects
 accidental edits, not the authenticity of the producer.
 
 The **change review dashboard** puts scope controls, coloured line deltas,
-miniature role bars, and commit context on one compact screen, without tabs.
-Expand files, original commits, evidence notes, or revision provenance inline.
-Role buttons filter the file receipts; select a scope or commit to update the
-same overview. Report comparison and search/shape filters are available in an
-expandable section when there are multiple reports or non-empty local layers.
-Bars use a shared scale within each group; binary sizes never enter line bars.
-The monospace layout follows the system colour scheme and stacks in narrow panels.
+miniature role bars, and collapsible commits on one compact screen, without tabs.
+Expand a role to see its file list in the same diffstat columns; expand a file
+to load its local diff on demand or open its GitHub diff when available. The
+live canvas displays local diffs up to 256 KiB; saved reports do not embed patch
+text. Expand Original commits to select a commit and update the same overview;
+scope selectors keep that overview in place. Report comparison and search/shape
+filters are available in an expandable section when there are multiple reports
+or non-empty local layers.
+Diffstat bars use a logarithmic scale; binary sizes never enter line bars.
+Repository text uses sans serif typography, while fixed headings and counts are
+monospaced. The dashboard follows the system colour scheme and stacks in narrow
+panels.
 
 Staged, unstaged, and untracked layers are independent snapshots,
 not part of the committed footprint. A merge's first-parent view is explicitly
@@ -71,10 +76,11 @@ same read-only dashboard as a canvas in the GitHub Copilot App. It analyzes
 the current session's repository, including committed changes and separate
 staged, unstaged, and untracked layers. With local layers present, the scope
 selector defaults to **All**, combining the committed footprint and each local
-snapshot; individual scopes remain available. These snapshots are independent
-comparisons, so the combined counts are not additive or deduplicated by path.
-The expandable comparison also shows each non-empty layer as a separate row.
-Select a scope or row to inspect its file receipts. The baseline is resolved from
+snapshot; the committed and individual local scopes remain available. These
+snapshots are independent comparisons, so All counts can repeat paths and are
+not additive. The expandable comparison also shows each non-empty local layer
+as a separate row. Select a scope or row to inspect its files, then expand a
+role to see its file list. The baseline is resolved from
 `origin/HEAD`; if that is not configured, the extension asks `gh` for the
 repository's default branch and uses its locally available ref. It does not
 fetch branches or execute repository code. If the default branch is not
@@ -131,7 +137,7 @@ reopened with `node cli.mjs view --input <report-id>.json --out <directory>`.
 
 Use **Report** to switch PRs, or expand **Compare reports** to search by
 repository or title and compare footprints. Select an original commit using
-**Scope** or **Original commits**; click a role bar to inspect its file receipts.
+**Scope** or **Original commits**; expand a role to inspect its file list.
 For a quick tour, try these repositories:
 
 | Repository | What to look at |

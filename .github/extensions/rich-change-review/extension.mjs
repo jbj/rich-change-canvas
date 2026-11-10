@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { createCanvas, joinSession } from "@github/copilot-sdk/extension";
-import { analyzeLocal } from "../../../src/local.mjs";
+import { analyzeLocal, getLocalFileDiff } from "../../../src/local.mjs";
 import { resolveDefaultBranch } from "../../../src/default-branch.mjs";
 import { renderReports } from "../../../src/render.mjs";
 
@@ -14,8 +14,31 @@ function analyze(workspacePath, base = resolveDefaultBranch(workspacePath)) {
 
 async function startServer(report) {
   const server = createServer((request, response) => {
-    const path = new URL(request.url, "http://127.0.0.1").pathname;
-    if (request.method !== "GET" || path !== "/") {
+    const requestUrl = new URL(request.url, "http://127.0.0.1");
+    if (request.method === "GET" && requestUrl.pathname === "/diff") {
+      try {
+        const result = getLocalFileDiff({
+          cwd: repositoryPath, report,
+          scope: requestUrl.searchParams.get("scope"),
+          path: requestUrl.searchParams.get("path"),
+        });
+        response.writeHead(200, {
+          "Cache-Control": "no-store",
+          "Content-Type": "application/json; charset=utf-8",
+          "X-Content-Type-Options": "nosniff",
+        });
+        response.end(JSON.stringify(result));
+      } catch (error) {
+        response.writeHead(Number.isInteger(error.statusCode) ? error.statusCode : 500, {
+          "Cache-Control": "no-store",
+          "Content-Type": "application/json; charset=utf-8",
+          "X-Content-Type-Options": "nosniff",
+        });
+        response.end(JSON.stringify({ error: error.message }));
+      }
+      return;
+    }
+    if (request.method !== "GET" || requestUrl.pathname !== "/") {
       response.writeHead(404);
       response.end();
       return;

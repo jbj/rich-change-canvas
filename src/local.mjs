@@ -58,6 +58,78 @@ function workingBlob(root, path) {
   return readFileSync(full);
 }
 
+export class LocalDiffRequestError extends Error {
+  constructor(statusCode, message) {
+    super(message);
+    this.statusCode = statusCode;
+  }
+}
+
+export function getLocalFileDiff({ cwd = process.cwd(), report, scope, path,
+  maxOutputBytes = 256 * 1024 } = {}) {
+  if (!report || report.source?.kind !== "local") {
+    throw new LocalDiffRequestError(400, "Local diffs require a local report");
+  }
+  if (typeof path !== "string" || !path || path.includes("\0")) {
+    throw new LocalDiffRequestError(400, "A valid file path is required");
+  }
+  if (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes < 1) {
+    throw new RangeError("Diff output limit must be a positive safe integer");
+  }
+
+  const root = realpathSync(cwd);
+  if (report.source.repository !== root) {
+    throw new LocalDiffRequestError(409, "Local report belongs to a different checkout");
+  }
+  const commitMatch = /^commit:(0|[1-9]\d*)$/.exec(scope ?? "");
+  let files, args, untracked = false;
+  if (scope === "whole") {
+    files = report.metrics.fileMetrics;
+    args = [report.comparison.mergeBaseSha, report.comparison.headSha];
+  } else if (commitMatch) {
+    const commit = report.commits[Number(commitMatch[1])];
+    if (!commit) throw new LocalDiffRequestError(400, "Commit scope is unavailable");
+    files = commit.metrics.fileMetrics;
+    args = [commit.parentSha, commit.sha];
+  } else {
+    const layer = report.layers.find((item) => item.id === scope);
+    if (!layer) throw new LocalDiffRequestError(400, "Local scope is unavailable");
+    files = layer.metrics.fileMetrics;
+    if (layer.id === "index") args = ["--cached", report.comparison.headSha];
+    else if (layer.id === "working") args = [];
+    else if (layer.id === "untracked") {
+      args = [];
+      untracked = true;
+    } else throw new LocalDiffRequestError(400, "Local scope is unsupported");
+  }
+
+  const file = files.find((item) => item.path === path);
+  if (!file) throw new LocalDiffRequestError(404, "File is not part of this scope");
+  if (file.binary) return { binary: true, diff: "" };
+
+  const common = ["--no-ext-diff", "--no-textconv", "--no-color", "--unified=3"];
+  const git = (gitArgs) => run("git", [
+    "--no-pager", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false",
+    "-c", "core.quotePath=false", "diff", ...gitArgs,
+  ], {
+    cwd: root, maxBuffer: maxOutputBytes, allowedExitCodes: [0, 1],
+  });
+  try {
+    if (untracked) {
+      const fullPath = resolve(root, path);
+      const bytes = workingBlob(root, path);
+      if (lstatSync(fullPath).isSymbolicLink()) {
+        return { binary: false, diff: `Symbolic link target: ${bytes.toString("utf8")}` };
+      }
+      return { binary: false, diff: git(["--no-index", ...common, "--", "/dev/null", path]) };
+    }
+    return { binary: false, diff: git([...common, ...args, "--", `:(literal)${path}`]) };
+  } catch (error) {
+    if (error.cause?.code === "ENOBUFS") return { tooLarge: true, diff: "" };
+    throw error;
+  }
+}
+
 export function analyzeLocal({ cwd = process.cwd(), base, includeWorking = false,
   maxCommits = 250, maxFiles = 3000, maxBlobBytes = 16 * 1024 * 1024 } = {}) {
   const gitOptions = ["--no-pager", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false"];

@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync, renameSync, symlinkSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "../src/process.mjs";
-import { analyzeLocal } from "../src/local.mjs";
+import { analyzeLocal, getLocalFileDiff } from "../src/local.mjs";
 import { loadReport, saveReport } from "../src/report.mjs";
 
 function fixture(t) {
@@ -57,6 +57,37 @@ test("Commits, filenames with tabs, binary bytes and mutable layers stay distinc
   await saveReport(artifacts, mutable);
   assert.deepEqual(await loadReport(artifacts, mutable.id), mutable);
   await assert.rejects(loadReport(artifacts, "../escape"), /Invalid report identity/);
+});
+
+test("Local file diffs match committed, staged, unstaged, and untracked scopes", (t) => {
+  const f = fixture(t);
+  mkdirSync(join(f.root, "src"));
+  f.write("src/value.js", "value = 1\n");
+  f.write("asset.bin", Buffer.from([0, 1, 2]));
+  const base = f.commit("base");
+  f.write("src/value.js", "value = 2\n");
+  f.write("asset.bin", Buffer.from([0, 1, 2, 3]));
+  f.commit("committed");
+  f.write("src/value.js", "value = 3\n");
+  f.git("add", "src/value.js");
+  f.write("src/value.js", "value = 4\n");
+  f.write("new.js", "value = 5\n");
+
+  const report = analyzeLocal({ cwd: f.root, base, includeWorking: true });
+  const diff = (scope, path, options = {}) => getLocalFileDiff({
+    cwd: f.root, report, scope, path, ...options,
+  });
+  assert.match(diff("whole", "src/value.js").diff, /-value = 1\n\+value = 2/);
+  assert.match(diff("commit:0", "src/value.js").diff, /-value = 1\n\+value = 2/);
+  assert.match(diff("index", "src/value.js").diff, /-value = 2\n\+value = 3/);
+  assert.match(diff("working", "src/value.js").diff, /-value = 3\n\+value = 4/);
+  assert.match(diff("untracked", "new.js").diff, /\+value = 5/);
+  assert.deepEqual(diff("whole", "asset.bin"), { binary: true, diff: "" });
+  assert.throws(() => diff("working", "missing.js"), { statusCode: 404 });
+  assert.deepEqual(diff("whole", "src/value.js", { maxOutputBytes: 32 }), { tooLarge: true, diff: "" });
+  assert.throws(() => getLocalFileDiff({
+    cwd: tmpdir(), report, scope: "whole", path: "src/value.js",
+  }), { statusCode: 409 });
 });
 
 test("Zero-line binary rename preserves byte sizes and rename identity", (t) => {

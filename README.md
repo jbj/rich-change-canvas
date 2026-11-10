@@ -99,6 +99,25 @@ Run the analyzer, persistence, CLI, renderer, and corpus-replay tests:
 node --test test/*.test.mjs research/metrics.test.mjs
 ```
 
+### Retesting canvas changes
+
+There is no build or dependency-install step: the analyzer and dashboard run
+directly from source. The extension caches imported modules, and the renderer
+loads HTML, CSS, and JavaScript together for that module's lifetime. After
+editing extension code, `src/`, or `web/`, reload extensions, confirm the
+provider loaded, and reopen the canvas. A page refresh alone does not load
+new code or assets.
+
+Each open canvas holds a report snapshot. Use a fresh canvas instance to
+collect new repository changes; merely focusing an existing instance does
+not recollect its report. Reloading the provider also recollects reports as
+instances are rehydrated.
+
+Verify the actual rendered page and changed controls, not just a successful
+canvas-open response. In particular, check that no "Unable to render report"
+message appears and that scope selection displays the expected files.
+See [AGENTS.md](AGENTS.md) for the agent verification procedure.
+
 ## Study data
 
 ### Browse all 30 sample PRs

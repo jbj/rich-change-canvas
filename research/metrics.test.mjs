@@ -25,6 +25,37 @@ test("Roles distinguish code, harnesses, inputs, and snapshots in all six langua
   ]) assert.equal(classify(path).category, category, path);
 });
 
+test("Repository-wide survey rules cover web, build, translation, and data files", () => {
+  for (const [path, category] of [
+    ["django/contrib/admin/templates/admin/404.html", "markup"], ["src/styles.scss", "markup"],
+    ["public/favicon.svg", "markup"], ["website/static/logo.png", "binary"],
+    ["docs/fonts/Inter.woff2", "binary"], ["django/conf/locale/af/LC_MESSAGES/django.po", "localization"],
+    ["BUILD.bazel", "manifest"], ["deps/LIEF/CMakeLists.txt", "manifest"], ["common.gypi", "manifest"],
+    ["Makefile", "manifest"], ["Makefile.js", "source"], [".yarn/patches/foo.patch", "manifest"],
+    ["deps/libffi/src/aarch64/sysv.S", "source"], ["pandas/_libs/algos.pyx", "source"],
+    ["gradlew.bat", "manifest"], [".husky/pre-commit", "source"],
+    ["LICENSE-MIT", "documentation"], ["etc/man/cargo-add.1", "documentation"],
+    ["scripts/install-dependencies.js", "source"], ["internal/licenses/embed.go", "source"],
+    ["server/src/main/resources/TransportVersions.csv", "data"], [".editorconfig", "configuration"],
+    ["src/main/resources/META-INF/services/org.example.Plugin", "configuration"],
+    ["include/config.h.in", "source"], ["licenses/antlr4-runtime-4.13.2.jar.sha1", "lockfile"],
+  ]) assert.equal(classify(path).category, category, path);
+});
+
+test("JVM test source sets and packages named like test roles are not misread", () => {
+  for (const [path, category] of [
+    ["server/src/internalClusterTest/java/org/example/FooIT.java", "test"],
+    ["x-pack/qa/rolling-upgrade/src/main/java/org/example/Upgrade.java", "test"],
+    ["server/src/main/java/org/elasticsearch/snapshots/SnapshotInfo.java", "source"],
+    ["compute/src/test/java/org/example/compute/data/BlockTests.java", "test"],
+    ["pandas/tests/io/data/stata/stata-compat-105.dta", "fixture"],
+    ["src/test/resources/golden/analysis.expected", "snapshot"],
+    ["tests/ui/borrowck/borrowck-init-in-fru.stderr", "snapshot"],
+    ["test/message/console_assert.out", "snapshot"],
+    ["build-tools-internal/src/main/resources/deb/preinst.ftl", "markup"],
+  ]) assert.equal(classify(path).category, category, path);
+});
+
 test("Empty diff is explicitly empty, not an unavailable metric", () => {
   const result = measure([]);
   assert.equal(result.churn, 0);

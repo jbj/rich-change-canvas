@@ -165,3 +165,16 @@ It parses source as data without importing or executing it. The checked-in
 Python and network access are not required to inspect them. Collection and the
 probe update their data files; the retained summary and written report are
 historical study artifacts and are not regenerated automatically.
+
+## Re-check file-role coverage
+
+The file-role classifier (`classify()` in `src/metrics.mjs`) is surveyed against
+every file in all 30 corpus repositories at their merge commits, not only the
+changed files. See [research/file-roles.md](research/file-roles.md) for the
+method, results, and audit.
+
+```sh
+node research/survey-files.mjs                      # fetch trees, write research/file-survey.json
+node research/compare-classifiers.mjs --base HEAD   # role transitions vs a git ref
+node research/sample-classification.mjs --size 50   # seeded stratified sample to audit by hand
+```

@@ -8,46 +8,78 @@ export function languageForPath(path) {
   return null;
 }
 
+const BINARY_EXTENSIONS = /\.(png|jpe?g|gif|webp|avif|bmp|ico|icns|cur|tiff?|psd|ai|pdf|woff2?|ttf|otf|eot|ttc|mp3|mp4|m4a|wav|ogg|oga|webm|mov|avi|flac|zip|gz|tgz|bz2|xz|zst|7z|tar|jar|war|ear|class|wasm|so|dylib|dll|exe|a|o|lib|obj|pyc|mo|pgo|bin|keystore|jks|p12|pfx|der|sqlite3?|db|npy|npz|parquet|pkl|pickle|xlsx?|docx?|pptx?|odt)$/i;
+const SOURCE_EXTENSIONS = /\.(c|h|cc|cpp|cxx|hpp|hh|hxx|inc|ipp|def|m|mm|[cm]?[jt]sx?|pyi?|pyx|pxd|pxi|go|rs|java|kt|kts|scala|groovy|clj|cljs|rb|php|pl|pm|lua|cs|fs|vb|swift|dart|ex|exs|erl|hrl|hs|ml|mli|elm|zig|nim|jl|r|coffee|vue|svelte|astro|sh|bash|zsh|fish|ps1|psm1|bat|cmd|awk|vim|el|sql|s|asm|wat|tq|proto|thrift|fbs|graphql|gql|g4|y|yy|l|ll|jflex|flex)$/i;
+
 export function classify(path, binary = false) {
   const name = path.split("/").at(-1);
   const rule = (category, reason) => ({ category, reason });
   if (binary) return rule("binary", "Blob bytes contain NUL or fail UTF-8 decoding");
-  if (/^(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|poetry\.lock|uv\.lock|go\.sum|Pipfile\.lock|Gemfile\.lock)$/.test(name)) {
-    return rule("lockfile", "Recognized lockfile basename");
+  if (BINARY_EXTENSIONS.test(name)) return rule("binary", "Binary media, archive, or compiled-file extension");
+  if (/^(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|poetry\.lock|uv\.lock|go\.sum|go\.work\.sum|Pipfile\.lock|Gemfile\.lock|composer\.lock|bun\.lockb?|[^/]+\.lock)$/.test(name) ||
+      /(^|\/)licenses\/[^/]+\.(sha1|sha256|sha512)$/.test(path)) {
+    return rule("lockfile", "Recognized lockfile basename or pinned dependency checksum");
   }
-  if (/(^|\/)(__snapshots__|snapshots)\/|\.(snap|shot)$|\.snap\.|(^|\/)baselines\/reference\//.test(path) ||
+  if (/(^|\/)__snapshots__\/|\.(snap|shot)$|\.expected(\.[^/.]+)?$|\.(stderr|stdout)$|(^|\/)tests?\/.*\.out$|\.snap\.|(^|\/)baselines\/reference\//.test(path) ||
+      /(^|\/)snapshots\//.test(path) && !/(^|\/)(java|kotlin|scala|groovy)\/.*\.(java|kt|scala|groovy)$/.test(path) ||
       /\/test\/fixtures\/.*\/output\.(json|js|ts)$/.test(path)) {
-    return rule("snapshot", "Snapshot directory or extension");
+    return rule("snapshot", "Snapshot directory, recorded-output extension, or golden file");
   }
   if (/(^|\/)(testFixtures|test-fixtures)\//.test(path)) {
     return rule("test-support", "Dedicated test-support source directory");
   }
-  if (/(^|\/)(fixtures?|__fixtures__|testdata|test_data|test-files|test_files)\//i.test(path)) {
+  if (/(^|\/)(fixtures?|__fixtures__|testdata|test_data|test-files|test_files)\//i.test(path) ||
+      /(^|\/)tests?\/(.*\/)?data\//.test(path) && !/(^|\/)(java|kotlin|scala|groovy)\/.*\.(java|kt|scala|groovy)$/.test(path)) {
     return rule("fixture", "Recognized test-input directory");
   }
   if (/^tests\/format\//.test(path) && !/(^|\/)format\.test\.[cm]?[jt]s$/.test(path)) {
     return rule("fixture", "Prettier formatter input outside its test harness");
   }
-  if (/(^|\/)(tests?|testing|__tests__|integration-tests|test-integration)\//i.test(path) ||
+  if (/(^|\/)(tests?|testing|__tests__|integration-tests|test-integration|e2e|qa)\//i.test(path) ||
+      /(^|\/)src\/[a-z][A-Za-z]*Test\//.test(path) ||
       /(^|\/)test_[^/]+\.py$|_test\.go$|\.(test|spec)\.[cm]?[jt]sx?$|(^|\/)[^/]*(Test|Tests|TestCase)\.java$/.test(path)) {
-    return rule("test", "Test directory or language-specific test filename");
+    return rule("test", "Test directory, test source set, or language-specific test filename");
   }
   if (/(^|\/)(docs?|documentation|changelog_unreleased)\//i.test(path) ||
-      /\.(md|mdx|rst|adoc)$/.test(path) ||
-      /^(README|CHANGELOG|CONTRIBUTING|AUTHORS|LICENSE|COPYING)(\.|$)/i.test(name)) {
-    return rule("documentation", "Documentation directory, basename, or extension");
+      /(^|\/)(LICENSES|licenses|man)\//.test(path) && !SOURCE_EXTENSIONS.test(name) ||
+      /\.(md|mdx|rst|adoc|txt\.md|[1-9])$/.test(name) || /^(CITATION(\.cff)?|\.?mailmap)$/.test(name) ||
+      /^(README|CHANGELOG|CHANGES|HISTORY|CONTRIBUTING|CONTRIBUTORS|AUTHORS|MAINTAINERS|LICEN[CS]E|COPYING|NOTICES?|INSTALL|SECURITY|CODE_OF_CONDUCT|PATENTS|ThirdPartyNotices)(\.(md|markdown|txt|rst|adoc|html?))?$/i.test(name) ||
+      /^(LICEN[CS]E|COPYING|NOTICE)[-_.][^/]+$/.test(name)) {
+    return rule("documentation", "Documentation or legal directory, basename, or extension");
   }
-  if (/^(package\.json|Cargo\.toml|go\.mod|pyproject\.toml|setup\.py|setup\.cfg|pom\.xml|build\.gradle(\.kts)?|requirements[^/]*\.txt)$/.test(name)) {
-    return rule("manifest", "Dependency/build manifest basename");
+  if (/^(package\.json|Cargo\.toml|go\.mod|go\.work|pyproject\.toml|setup\.py|setup\.cfg|MANIFEST\.in|pom\.xml|requirements[^/]*\.(txt|in)|Gemfile|composer\.json|[^/]*\.gradle(\.kts)?|gradle\.properties|gradlew(\.bat)?|CMakeLists\.txt|meson\.build|meson_options\.txt|BUILD(\.bazel)?|WORKSPACE(\.bazel)?|MODULE\.bazel|BUCK|(GNU)?[Mm]akefile(\.(?!([^/]*\.)?[cm]?[jt]s$)[^/]*)?|build\.info|[^/]*\.(bzl|bazel|gn|gni|gyp|gypi|mk|cmake|m4|wrap|csproj|fsproj|vcxproj|sln|wixproj|patch|diff))$/.test(name)) {
+    return rule("manifest", "Dependency/build manifest, build script, or dependency patch");
   }
   if (/(\.pb\.go|\.generated\.[^/]+|\.gen\.[^/]+)$/.test(path) || /(^|\/)(generated|gen)\//.test(path)) {
     return rule("generated", "Explicit generated directory or filename convention");
   }
-  if (/\.(c|h|cc|cpp|cxx|hpp|m|mm|[cm]?[jt]sx?|pyi?|go|rs|java|kt|kts|scala|rb|sh|bash|sql|swift|vue|svelte)$/.test(path)) {
+  if (/\.(po|pot|isl|xlf|xliff|arb|resx|strings)$/i.test(name) || /(^|\/)(locales?|i18n|l10n)\/[^/]+\.json$/.test(path)) {
+    return rule("localization", "Translation catalog extension or locale directory");
+  }
+  if (SOURCE_EXTENSIONS.test(name)) {
     return rule("source", "Recognized code extension outside more-specific roles");
   }
-  if (/(^|\/)\.github\/|\.(ya?ml|toml|json|xml|ini|cfg|conf|properties)$|(^|\/)(Makefile|Dockerfile|\.gitignore|\.gitattributes)$/.test(path)) {
+  if (/\.(java|py|go|rs|[cm]?[jt]sx?|c|h|cpp|kt|rb|sh)\.(st|tpl|tmpl|jte|txt|template)$|\.(py|rs|go|java)-tpl$/i.test(name)) {
+    return rule("source", "Code-generation template for a recognized language");
+  }
+  if (/(^|\/)(bin|scripts?|\.husky|hooks|githooks)\/[^/.]+$/.test(path) || /(^|\/)docker[^/]*\/.*\/[^/.]+$/.test(path) && !/^[A-Z][A-Z_]+$/.test(name)) {
+    return rule("source", "Extensionless file in a script, hook, or binary directory");
+  }
+  if (/\.(html?|xhtml|css|scss|sass|less|styl|sss|pcss|svg|xsl|xslt|ejs|hbs|handlebars|mustache|njk|jinja2?|j2|liquid|twig|tpl|ftl|ftlh|vm|kml)$/i.test(name)) {
+    return rule("markup", "Markup, stylesheet, vector image, or template extension");
+  }
+  if (/\.(csv|tsv|psv|dat|dic|ndjson|jsonl|geojson|csv-spec|sql-spec)$/i.test(name)) {
+    return rule("data", "Tabular or line-oriented data extension");
+  }
+  if (/(^|\/)\.github\/|\.(ya?ml|toml|json|jsonc|json5|xml|ini|cfg|conf|properties|prefs|env|editorconfig|code-snippets|code-workspace|defconfig|ld|lds|alg|plist|sublime-project|wxs|nuspec|config)$/.test(path) ||
+      /(^|\/)META-INF\/services\//.test(path) ||
+      /^(\.[^/]*(ignore|rc|attributes|modules|keep|-blame-ignore-revs)|\.env(\..+)?|_gitignore|Dockerfile([.-][^/]*)?|Containerfile|Procfile|Vagrantfile|Jenkinsfile|CODEOWNERS|OWNERS|DIR_METADATA|CNAME|_redirects|_headers|\.nojekyll|py\.typed|\.coveragerc|\.flake8|\.pylintrc|\.dockerignore|\.gitmodules|\.npmrc|\.nvmrc|\.node-version|\.python-version|rust-toolchain(\.toml)?|rust-version)$/.test(name)) {
     return rule("configuration", "Configuration directory, extension, or basename");
+  }
+  const wrapped = /^(.+\.[^/.]+)\.(in|template|tmpl|example|sample|dist|orig)$/.exec(path);
+  if (wrapped) {
+    const inner = classify(wrapped[1]);
+    if (inner.category !== "other") return rule(inner.category, `${inner.reason} (.${wrapped[2]} wrapper)`);
   }
   return rule("other", "No explicit role rule matched; inspect instead of guessing");
 }

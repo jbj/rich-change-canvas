@@ -165,6 +165,8 @@ test("Role bars share a text-line scale with expandable file rows", () => {
   const tests = categoryRow(page, "test");
   const docs = categoryRow(page, "documentation");
   assert.equal(source.children[2].children[0].attributes["aria-label"], "Source: +30 / -10 text lines; logarithmic scale 0–40");
+  assert.equal(source.children[3].className, "table-spacer");
+  assert.equal(source.children[3].attributes["aria-hidden"], "true");
   assert.equal(page["line-scale"].textContent, "Log scale · max 40 lines · binary: bytes");
   assert.deepEqual(source.children[2].children[0].children.map((rect) => rect.attributes.width), ["100", "75", "25"]);
   const testBarWidths = tests.children[2].children[0].children.map((rect) => Number(rect.attributes.width));
@@ -175,6 +177,8 @@ test("Role bars share a text-line scale with expandable file rows", () => {
   assert.equal(page["provenance-panel"], undefined);
   const testFile = fileRow(page, "test/main.test.js");
   const docFile = fileRow(page, "docs/new.md");
+  assert.equal(testFile.children[3].className, "table-spacer");
+  assert.equal(testFile.children[3].attributes["aria-hidden"], "true");
   assert.equal(testFile.hidden, true);
   assert.equal(categoryToggle(page, "test").attributes["aria-expanded"], "false");
   categoryToggle(page, "test").events.click();
@@ -202,7 +206,7 @@ test("Opening a local file lazily renders its selected-scope diff", async () => 
   const details = row.children[0].children[0];
   const outputRow = diffRow(page, "src/value.js"), outputCell = outputRow.children[0];
   assert.equal(outputRow.hidden, true);
-  assert.equal(outputCell.colSpan, 3);
+  assert.equal(outputCell.colSpan, 4);
   details.open = true;
   details.events.toggle();
   await new Promise((resolve) => setImmediate(resolve));

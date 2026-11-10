@@ -7,6 +7,11 @@
     if (className) node.className = className;
     return node;
   };
+  const spacerCell = () => {
+    const cell = el("td", undefined, "table-spacer");
+    cell.setAttribute("aria-hidden", "true");
+    return cell;
+  };
   const roles = {
     source: "Source", test: "Tests", "test-support": "Test support",
     fixture: "Inputs", snapshot: "Snapshots", documentation: "Docs",
@@ -148,7 +153,7 @@
         diffRow.hidden = true;
         diffRow.dataset.filePath = file.path;
         const diffCell = el("td");
-        diffCell.colSpan = 3;
+        diffCell.colSpan = 4;
         diffRow.append(diffCell);
         loadLocalDiff(details, file, current, diffCell, diffRow, isCategoryExpanded);
       } else {
@@ -158,6 +163,7 @@
       pathCell.append(details);
       const metricCell = el("td");
       const barCell = el("td");
+      const spacer = spacerCell();
       if (file.binary) {
         metricCell.append(el("span", `${file.beforeBytes ?? 0} → ${file.afterBytes ?? 0} B`, "count"));
       } else {
@@ -165,7 +171,7 @@
         barCell.append(bar([[file.additions, "bar-added"], [file.deletions, "bar-deleted"]],
           maximum, `${file.path}: ${count(file)} text lines; logarithmic scale 0–${maximum}`));
       }
-      row.append(pathCell, metricCell, barCell);
+      row.append(pathCell, metricCell, barCell, spacer);
       return { row, diffRow, details };
     }
     function originalCommits(report) {
@@ -218,7 +224,7 @@
           barCell.append(bar([[metric.additions, "bar-added"], [metric.deletions, "bar-deleted"]],
             maximum, `${roles[key]}: ${count(metric)} text lines; logarithmic scale 0–${maximum}`));
         }
-        categoryRow.append(nameCell, metricCell, barCell);
+        categoryRow.append(nameCell, metricCell, barCell, spacerCell());
         let expanded = false;
         const files = metrics.fileMetrics.filter((file) => file.category === key);
         const fileRows = files.map((file) => fileRow(file, maximum, url, current, () => expanded));

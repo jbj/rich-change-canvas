@@ -62,7 +62,9 @@ study below has separate, stronger review-selection evidence.
 The project extension in `.github/extensions/rich-change-review/` opens the
 same read-only review desk as a canvas in the GitHub Copilot App. It analyzes
 the current session's repository, including committed changes and separate
-staged, unstaged, and untracked layers. The baseline is resolved from
+staged, unstaged, and untracked layers. The review desk shows each non-empty
+local layer as its own row with counts; select a row to inspect that layer's
+file receipts. Local counts are not added to the committed footprint. The baseline is resolved from
 `origin/HEAD`; if that is not configured, the extension asks `gh` for the
 repository's default branch and uses its locally available ref. It does not
 fetch branches or execute repository code. If the default branch is not

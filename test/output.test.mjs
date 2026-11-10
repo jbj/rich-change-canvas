@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { createReport, loadReport, saveReport } from "../src/report.mjs";
 import { renderReports } from "../src/render.mjs";
 import { run } from "../src/process.mjs";
+import { runInNewContext } from "node:vm";
 
 const cli = resolve("cli.mjs");
 function temporary(t) {
@@ -22,6 +23,84 @@ function sample() {
       additions: 0, deletions: 0, beforeBytes: 4, afterBytes: 9, patchState: "binary" }],
   });
 }
+
+function reviewPage(report) {
+  class Element {
+    children = [];
+    value = "";
+    hidden = false;
+    dataset = {};
+    events = {};
+    constructor(tag, text = "") { this.tag = tag; this.text = text; }
+    get textContent() { return this.text + this.children.map((child) => child.textContent).join(""); }
+    set textContent(value) { this.text = value; this.children = []; }
+    get childElementCount() { return this.children.length; }
+    append(...children) { this.children.push(...children); }
+    replaceChildren(...children) { this.children = children; }
+    addEventListener(name, handler) { this.events[name] = handler; }
+    setAttribute() {}
+    removeAttribute() {}
+  }
+  const ids = [...readFileSync(new URL("../web/review.html", import.meta.url), "utf8").matchAll(/id="([^"]+)"/g)];
+  const nodes = Object.fromEntries(ids.map(([, id]) => [id, Object.assign(new Element("div"), { id })]));
+  const tabs = ["desk", "receipt", "history"].map((id) => {
+    const node = nodes[`tab-${id}`];
+    node.dataset.view = id;
+    return node;
+  });
+  nodes["report-data"].textContent = JSON.stringify([report]);
+  const document = {
+    getElementById: (id) => nodes[id],
+    createElement: (tag) => new Element(tag),
+    createTextNode: (text) => new Element("#text", text),
+    querySelectorAll: (selector) => selector === "[data-view]" ? tabs :
+      ["desk", "receipt", "history"].map((id) => nodes[id]),
+  };
+  runInNewContext(readFileSync(new URL("../web/review.js", import.meta.url), "utf8"), { document, URL });
+  assert.equal(nodes.error.textContent, "");
+  return nodes;
+}
+
+test("Review desk exposes each local layer and opens its own file receipts", () => {
+  const file = (path, additions, binary = false) => ({
+    path, status: "added", additions, deletions: 0, binary,
+    beforeBytes: null, afterBytes: 4, patchState: binary ? "binary" : "complete",
+  });
+  const report = createReport({
+    source: { kind: "local", repository: "fixture" }, title: "Local changes",
+    comparison: { mergeBaseSha: "base", headSha: "base", mutableContentHash: "snapshot" },
+    files: [],
+    layers: [
+      { id: "index", title: "Staged", files: [file("src/staged.js", 2)] },
+      { id: "working", title: "Unstaged", files: [file("test/local.test.js", 3)] },
+      { id: "untracked", title: "Untracked", files: [file("new.bin", 0, true)] },
+    ],
+  });
+  const page = reviewPage(report);
+  const rows = page["report-rows"].children;
+  assert.equal(rows.length, 4);
+  assert.equal(rows[0].children[1].textContent, "+0 / -0");
+  assert.equal(rows[1].children[1].textContent, "+2 / -0");
+  assert.equal(rows[2].children[2].textContent, "+3 / -0");
+  assert.equal(rows[3].children[5].textContent, "1");
+  assert.equal(page.scope.value, "index");
+  rows[2].children[0].children[0].events.click();
+  assert.equal(page.scope.value, "working");
+  assert.equal(page.receipt.hidden, false);
+  assert.match(page["file-list"].textContent, /test\/local.test.js/);
+  assert.doesNotMatch(page["file-list"].textContent, /src\/staged.js/);
+  page.shape.value = "binary";
+  page.shape.events.change();
+  assert.equal(page["report-rows"].children.length, 1);
+  assert.match(page["report-rows"].textContent, /Untracked/);
+});
+
+test("Review desk preserves committed-only reports without local rows", () => {
+  const page = reviewPage(sample());
+  assert.equal(page["report-rows"].children.length, 1);
+  assert.equal(page.scope.value, "whole");
+  assert.equal(page["report-rows"].children[0].children[5].textContent, "1");
+});
 
 test("HTML embeds untrusted data without script or template injection", () => {
   const report = sample();

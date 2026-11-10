@@ -138,7 +138,7 @@
         el("p", `Ordinary commit churn: ${ordinary} lines. Merge-context churn: ${merges} lines.`),
         el("p", "These are different comparisons, not additive measures of the final change or of wasted effort.", "muted"));
     }
-    function load() {
+    function load(key) {
       category = null;
       const report = selected();
       $("scope").replaceChildren();
@@ -146,7 +146,9 @@
       add("whole", "Whole change: merge base to head");
       for (const [index, commit] of report.commits.entries()) add(`commit:${index}`,
         `${index + 1}. ${commit.sha.slice(0, 8)} ${commit.parentCount > 1 ? "[merge] " : ""}${commit.subject}`);
-      for (const layer of report.layers) add(layer.id, layer.title);
+      for (const layer of report.layers) add(layer.id, `${layer.title} / ${count(layer.metrics)} / ${layer.metrics.files} files`);
+      $("scope").value = typeof key === "string" ? key :
+        !report.metrics.files ? report.layers.find((layer) => layer.metrics.files)?.id ?? "whole" : "whole";
       link($("source-link"), report.source.url);
       render();
     }
@@ -156,17 +158,25 @@
       for (const [index, report] of reports.entries()) {
         if (!`${report.title} ${report.source.repository}`.toLowerCase().includes(query)) continue;
         if (shape === "multi" && report.commits.length < 2) continue;
-        if (shape === "binary" && !report.metrics.binaryFiles) continue;
-        if (shape === "incomplete" && !report.metrics.incomplete) continue;
-        const row = el("tr"), title = el("td"), button = el("button", report.title);
-        button.addEventListener("click", () => { $("report").value = index; load(); show("receipt"); });
-        title.append(button, el("div", report.source.repository, "muted"));
-        const sum = (keys, field) => keys.reduce((total, key) => total + (report.metrics.categories[key]?.[field] ?? 0), 0);
-        const tests = ["test", "test-support", "fixture", "snapshot"];
-        row.append(title, el("td", count({ additions: sum(["source"], "additions"), deletions: sum(["source"], "deletions") }), "count"),
-          el("td", count({ additions: sum(tests, "additions"), deletions: sum(tests, "deletions") }), "count"),
-          el("td", String(report.metrics.files)), el("td", String(report.commits.length)), el("td", String(report.metrics.binaryFiles)));
-        $("report-rows").append(row);
+        const scopes = [
+          { id: "whole", title: report.layers.length ? `${report.title} / Committed` : report.title, metrics: report.metrics },
+          ...report.layers.filter((layer) => layer.metrics.files),
+        ];
+        for (const current of scopes) {
+          const metrics = current.metrics;
+          if (shape === "binary" && !metrics.binaryFiles) continue;
+          if (shape === "incomplete" && !metrics.incomplete) continue;
+          const row = el("tr"), title = el("td"), button = el("button", current.title);
+          button.addEventListener("click", () => { $("report").value = index; load(current.id); show("receipt"); });
+          title.append(button, el("div", report.source.repository, "muted"));
+          const sum = (keys, field) => keys.reduce((total, key) => total + (metrics.categories[key]?.[field] ?? 0), 0);
+          const tests = ["test", "test-support", "fixture", "snapshot"];
+          row.append(title, el("td", count({ additions: sum(["source"], "additions"), deletions: sum(["source"], "deletions") }), "count"),
+            el("td", count({ additions: sum(tests, "additions"), deletions: sum(tests, "deletions") }), "count"),
+            el("td", String(metrics.files)), el("td", current.id === "whole" ? String(report.commits.length) : "Uncommitted"),
+            el("td", String(metrics.binaryFiles)));
+          $("report-rows").append(row);
+        }
       }
       $("empty").hidden = $("report-rows").childElementCount > 0;
     }

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-__NONCE__'; style-src 'nonce-__NONCE__'; img-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Rich change summaries</title>
+<style nonce="__NONCE__">__STYLE__</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Read-only change evidence</div>
+    <h1>Review the change, not just its size.</h1>
+    <p class="muted">Absolute text-line counts and binary byte sizes. No approval score.</p>
+  </header>
+  <p id="error" role="alert" hidden></p>
+  <nav role="tablist" aria-label="Change summaries">
+    <button id="tab-desk" role="tab" data-view="desk" aria-controls="desk" aria-selected="true">Review desk</button>
+    <button id="tab-receipt" role="tab" data-view="receipt" aria-controls="receipt" aria-selected="false">Change receipt</button>
+    <button id="tab-history" role="tab" data-view="history" aria-controls="history" aria-selected="false">Commit trail</button>
+  </nav>
+  <section id="desk" role="tabpanel" aria-labelledby="tab-desk">
+    <div class="toolbar">
+      <label>Find <input id="search" type="search" placeholder="Repository or title"></label>
+      <label>Shape <select id="shape">
+        <option value="">All reports</option>
+        <option value="multi">Multiple commits</option>
+        <option value="binary">Binary changes</option>
+        <option value="incomplete">Incomplete text patches</option>
+      </select></label>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Change</th><th>Source lines</th><th>Test/support/input/snapshot lines</th><th>Files</th><th>Commits</th><th>Binary files</th></tr></thead>
+        <tbody id="report-rows"></tbody>
+      </table>
+    </div>
+    <p id="empty" class="muted" hidden>No reports match these filters.</p>
+  </section>
+  <div id="selection" hidden>
+    <div class="toolbar">
+      <label>Report <select id="report"></select></label>
+      <a id="source-link" target="_blank" rel="noreferrer noopener" hidden>Open PR</a>
+    </div>
+    <div class="toolbar">
+      <label>Zoom <select id="scope"></select></label>
+      <a id="commit-link" target="_blank" rel="noreferrer noopener" hidden>Open commit</a>
+    </div>
+    <div id="comparison" class="note"></div>
+  </div>
+  <section id="receipt" role="tabpanel" aria-labelledby="tab-receipt" hidden>
+    <h2 id="receipt-title"></h2>
+    <div id="totals" class="grid"></div>
+    <div class="split">
+      <article class="card">
+        <h2>Absolute footprint</h2>
+        <table><thead><tr><th>Role</th><th>Files</th><th>Added lines / before bytes</th><th>Deleted lines / after bytes</th></tr></thead><tbody id="category-rows"></tbody></table>
+        <p class="muted">Select a role to filter the file receipts. Text includes comments and blank lines; byte counts are labeled separately.</p>
+        <button id="clear-category" hidden>Show all file receipts</button>
+      </article>
+      <article class="card">
+        <h2>Evidence and limits</h2>
+        <div id="evidence"></div>
+        <div id="observations"></div>
+      </article>
+    </div>
+    <article class="card files">
+      <h2 id="files-heading">File receipts</h2>
+      <div id="file-list"></div>
+    </article>
+  </section>
+  <section id="history" role="tabpanel" aria-labelledby="tab-history" hidden>
+    <div class="split">
+      <article class="card">
+        <h2>Every original commit</h2>
+        <p class="muted">Commit-to-first-parent comparisons. Merge commits can contain upstream changes and conflict resolutions.</p>
+        <div id="commit-list"></div>
+      </article>
+      <article class="card">
+        <h2>History is not the final footprint</h2>
+        <div id="history-totals"></div>
+        <button id="inspect">Inspect selected scope</button>
+      </article>
+    </div>
+  </section>
+  <footer>
+    Generated read-only report. To refresh, rerun acquisition against the desired revisions.
+    No repository code, builds, or workflows were executed. Native Copilot canvas registration is not yet available.
+  </footer>
+</main>
+<script id="report-data" type="application/json" nonce="__NONCE__">__DATA__</script>
+<script nonce="__NONCE__">__SCRIPT__</script>
+</body>
+</html>

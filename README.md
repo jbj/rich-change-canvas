@@ -9,6 +9,60 @@ has at most two human discussion entries, a non-author human approval on its hea
 before merge, and a maintainer approval. Bot activity is reported separately.
 This is a convenience sample, not a validated approval classifier.
 
+## Analyze your own changes
+
+The standalone analyzer and browser UI work now, without a native extension.
+They require Node.js 22 or newer and Git. GitHub acquisition also requires
+authenticated `gh` with access to the target repository.
+
+```sh
+# Merge-base-to-HEAD, each original commit, and separate mutable local layers.
+node cli.mjs local --base HEAD~1 --working --out /tmp/change-reports
+
+# Public or accessible private PR, with individually inspectable commits.
+node cli.mjs pr --repository prettier/prettier --number 20459 --out /tmp/pr-reports
+
+# Reopen or compare previously collected reports, without network access.
+node cli.mjs view --input /tmp/change-reports/<report-id>.json \
+  --input /tmp/pr-reports/<report-id>.json --out /tmp/review-desk
+open /tmp/review-desk/review.html
+```
+
+Choose an output directory **outside the analyzed repository**. Each acquisition
+writes a versioned, SHA-256-identified JSON report and a self-contained
+`review.html`. Reports contain filenames, counts, commit subjects and revision
+identifiers, not copied source or patches. Local reports also contain the
+repository's absolute path. Treat reports from private repositories as private.
+Saved content identity is verified when saving and reopening; it detects
+accidental edits, not the authenticity of the producer.
+
+**Review desk** compares reports, **Change receipt** exposes role rules and
+per-file measurements, and **Commit trail** lets you zoom into every original
+commit. Staged, unstaged, and untracked layers are independent snapshots,
+not part of the committed footprint. A merge's first-parent view is explicitly
+labeled merge context. Binary changes use before/after bytes, including renames;
+missing text patches remain marked incomplete. A zero-line rename still counts
+as a changed file.
+
+Acquisition fails explicitly on stale inputs, unsupported non-file entries,
+inconsistent API totals, or collection limits. Defaults are 250 commits, 3,000
+files per local scope, and 16 MiB per fetched blob; individual commands also
+have a 120-second timeout and 128 MiB output budget. GitHub's file API caps and
+missing blobs can prevent complete acquisition. Blob classification uses NUL
+bytes or failed strict UTF-8 decoding. No repository programs, filters, builds,
+or workflows are executed; Git external diffs and text conversion are disabled.
+
+The baseline provides deterministic **file-level evidence only**. Structural
+analysis is visibly unavailable, not zero. GitHub discussion totals in new
+reports include bots and do not claim verified human approvals; the curated
+study below has separate, stronger review-selection evidence.
+
+Run the analyzer, persistence, CLI, renderer, and corpus-replay tests:
+
+```sh
+node --test test/*.test.mjs research/metrics.test.mjs
+```
+
 ## Explore the study
 
 Requires Node.js 22 or newer. No packages, server, or repository code execution

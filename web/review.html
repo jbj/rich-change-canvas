@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-__NONCE__'; style-src 'nonce-__NONCE__'; img-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-__NONCE__'; style-src 'nonce-__NONCE__'; connect-src 'self'; img-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Change review</title>
 <style nonce="__NONCE__">__STYLE__</style>
 </head>
@@ -46,36 +46,17 @@
     <div class="dashboard">
       <section class="panel footprint" aria-labelledby="footprint-heading">
         <h2 id="footprint-heading">Footprint <span class="muted">/ text lines</span></h2>
-        <div class="role-head muted"><span>Role · files</span><span>+added / −deleted</span><span>Churn</span></div>
-        <div id="category-rows"></div>
+        <table class="footprint-table">
+          <thead><tr><th>Role · files</th><th>+added / −deleted</th><th>Churn</th><th class="table-spacer" aria-hidden="true"></th></tr></thead>
+          <tbody id="category-rows"></tbody>
+        </table>
         <p id="role-empty" class="muted" hidden>No changed files.</p>
         <p class="legend"><span class="added">+ added</span> <span class="deleted">− deleted</span> <span id="line-scale" class="muted"></span></p>
-        <button id="clear-category" hidden>Clear role filter</button>
-      </section>
-      <section class="panel history" aria-labelledby="history-heading">
-        <h2 id="history-heading">Commit context <span class="muted">/ whole report</span></h2>
-        <div id="history-totals"></div>
-        <p class="muted compact">Final ≠ summed history. Comparisons are not additive.</p>
-        <details id="commits-panel">
-          <summary id="commits-heading">Original commits</summary>
-          <p class="muted compact">Each commit vs first parent. Merges include upstream changes and conflict resolutions.</p>
-          <div id="commit-list"></div>
-        </details>
       </section>
     </div>
-    <details id="evidence-panel" class="panel">
-      <summary id="evidence-status"></summary>
-      <div id="evidence"></div>
-      <div id="observations"></div>
-    </details>
-    <details id="files-panel" class="panel">
-      <summary id="files-heading">Files</summary>
-      <div id="file-list"></div>
-    </details>
-    <details id="provenance-panel" class="panel">
-      <summary>Revisions <span class="muted">/ provenance &amp; limits</span></summary>
-      <div id="comparison"></div>
-      <p class="muted">Text counts include comments and blank lines. Counts are not coverage, correctness, or an approval recommendation. No separate test-file delta does not mean no tests.</p>
+    <details id="commits-panel" class="panel">
+      <summary id="commits-heading">Original commits</summary>
+      <div id="commit-list"></div>
     </details>
   </section>
   <footer>File-level evidence only · no approval score · no repository code, builds, or workflows executed</footer>

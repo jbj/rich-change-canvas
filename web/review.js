@@ -56,6 +56,9 @@
     const scope = () => {
       const report = selected();
       const key = $("scope").value;
+      if (key === "all") return { title: "All: committed + local snapshots",
+        metrics: report.allMetrics, before: report.comparison.mergeBaseSha,
+        after: `${report.comparison.headSha} + local snapshots` };
       if (key === "whole") return { title: "Committed: merge base to head", metrics: report.metrics,
         before: report.comparison.mergeBaseSha, after: report.comparison.headSha };
       if (key.startsWith("commit:")) {
@@ -144,7 +147,7 @@
       const report = selected(), current = scope(), metrics = current.metrics;
       $("review-title").textContent = `${report.source.repository} / ${report.title}`;
       $("scope-note").textContent = report.layers.length ?
-        "Committed / staged / unstaged / untracked are independent snapshots. Counts are not additive." :
+        "All combines independent committed / staged / unstaged / untracked snapshots. Counts are not additive; paths may repeat." :
         "Selected scope only. Text lines and binary bytes are separate.";
       $("comparison").replaceChildren(el("strong", current.title),
         el("p", `${current.before ?? "empty tree"} → ${current.after}`),
@@ -204,12 +207,13 @@
       const report = selected();
       $("scope").replaceChildren();
       const add = (value, text) => { const option = el("option", text); option.value = value; $("scope").append(option); };
+      if (report.layers.length) add("all", `All · ${report.allMetrics.files} files · ${count(report.allMetrics)}`);
       add("whole", `Committed · ${report.metrics.files} files · ${count(report.metrics)}`);
       for (const layer of report.layers) add(layer.id, `${layer.title} · ${layer.metrics.files} files · ${count(layer.metrics)}`);
       for (const [index, commit] of report.commits.entries()) add(`commit:${index}`,
         `${commit.sha.slice(0, 8)} ${commit.parentCount > 1 ? "[merge] " : ""}${commit.subject}`);
       $("scope").value = typeof key === "string" ? key :
-        !report.metrics.files ? report.layers.find((layer) => layer.metrics.files)?.id ?? "whole" : "whole";
+        report.layers.length ? "all" : "whole";
       link($("source-link"), report.source.url);
       render();
     }

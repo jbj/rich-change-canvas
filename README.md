@@ -69,10 +69,12 @@ study below has separate, stronger review-selection evidence.
 The project extension in `.github/extensions/rich-change-review/` opens the
 same read-only dashboard as a canvas in the GitHub Copilot App. It analyzes
 the current session's repository, including committed changes and separate
-staged, unstaged, and untracked layers. The scope selector exposes each local
-layer with its own counts; the expandable comparison also shows each non-empty
-layer as a separate row. Select a scope or row to inspect that layer's
-file receipts. Local counts are not added to the committed footprint. The baseline is resolved from
+staged, unstaged, and untracked layers. With local layers present, the scope
+selector defaults to **All**, combining the committed footprint and each local
+snapshot; individual scopes remain available. These snapshots are independent
+comparisons, so the combined counts are not additive or deduplicated by path.
+The expandable comparison also shows each non-empty layer as a separate row.
+Select a scope or row to inspect its file receipts. The baseline is resolved from
 `origin/HEAD`; if that is not configured, the extension asks `gh` for the
 repository's default branch and uses its locally available ref. It does not
 fetch branches or execute repository code. If the default branch is not

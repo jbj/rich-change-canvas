@@ -6,15 +6,18 @@ import { analyzeLocal } from "./src/local.mjs";
 import { analyzePullRequest } from "./src/github.mjs";
 import { saveReport, loadReport } from "./src/report.mjs";
 import { renderReports } from "./src/render.mjs";
+import { reportsFromCorpus } from "./src/corpus.mjs";
 
 const help = `Usage:
   node cli.mjs local --base <ref> --out <artifact-directory> [--cwd <repo>] [--working]
   node cli.mjs pr --repository <owner/name> --number <N> --out <artifact-directory>
   node cli.mjs view --input <report.json> [--input <report.json> ...] --out <artifact-directory>
+  node cli.mjs corpus --input <corpus.json> --out <artifact-directory>
 
 Reports are read-only snapshots. Output includes immutable JSON and review.html.
 Local analysis never switches branches, stashes, commits, or executes repository code.
 --working adds separate staged, unstaged, and untracked snapshots.
+corpus renders retained study samples offline through the same review dashboard.
 `;
 
 try {
@@ -31,12 +34,13 @@ try {
     console.log(help);
   } else {
     const [command] = positionals;
-    if (positionals.length !== 1 || !["local", "pr", "view"].includes(command)) throw new Error(help);
+    if (positionals.length !== 1 || !["local", "pr", "view", "corpus"].includes(command)) throw new Error(help);
     if (!values.out) throw new Error("--out is required; choose an artifact directory outside the analyzed repository");
     const allowed = {
       local: new Set(["base", "out", "cwd", "working"]),
       pr: new Set(["repository", "number", "out"]),
       view: new Set(["input", "out"]),
+      corpus: new Set(["input", "out"]),
     }[command];
     for (const [key, value] of Object.entries(values)) {
       if (value !== false && !allowed.has(key)) throw new Error(`--${key} is not valid for ${command}`);
@@ -45,6 +49,10 @@ try {
     let reports;
     if (command === "local") reports = [analyzeLocal({ cwd: values.cwd, base: values.base, includeWorking: values.working })];
     if (command === "pr") reports = [analyzePullRequest({ repository: values.repository, number: Number(values.number) })];
+    if (command === "corpus") {
+      if (values.input?.length !== 1) throw new Error("corpus requires exactly one --input corpus.json");
+      reports = reportsFromCorpus(JSON.parse(await readFile(resolve(values.input[0]), "utf8")));
+    }
     if (command === "view") {
       if (!values.input?.length) throw new Error("view requires at least one --input report.json");
       reports = await Promise.all(values.input.map(async (path) => {

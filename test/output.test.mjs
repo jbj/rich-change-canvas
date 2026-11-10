@@ -7,6 +7,7 @@ import { createReport, loadReport, saveReport } from "../src/report.mjs";
 import { renderReports } from "../src/render.mjs";
 import { run } from "../src/process.mjs";
 import { runInNewContext } from "node:vm";
+import { reportsFromCorpus } from "../src/corpus.mjs";
 
 const cli = resolve("cli.mjs");
 function temporary(t) {
@@ -252,6 +253,7 @@ test("CLI generates immutable reports and reopens multiple persisted inputs", as
     source: { kind: "fixture", repository: "empty" }, title: "Empty scope",
     comparison: { baseSha: "base", mergeBaseSha: "base", headSha: "base" }, files: [],
   });
+
   const firstPath = await saveReport(join(output, "inputs"), first);
   const secondPath = await saveReport(join(output, "inputs"), second);
   run("node", [cli, "view", "--input", firstPath, "--input", secondPath, "--out", join(output, "rendered")]);
@@ -261,4 +263,43 @@ test("CLI generates immutable reports and reopens multiple persisted inputs", as
   assert.ok(existsSync(join(output, "rendered", `${first.id}.json`)));
   assert.throws(() => run("node", [cli, "pr", "--working", "--out", output]), /not valid for pr/);
   assert.throws(() => run("node", [cli, "local", "--base", "HEAD"]), /--out is required/);
+});
+
+test("Corpus CLI creates an offline gallery reusable by view, with navigable real PR scopes", async (t) => {
+  const output = temporary(t);
+  const corpusPath = resolve("research/corpus.json");
+  const reports = reportsFromCorpus(JSON.parse(readFileSync(corpusPath, "utf8")));
+  run("node", [cli, "corpus", "--input", corpusPath, "--out", output]);
+  const html = readFileSync(join(output, "review.html"), "utf8");
+  const embedded = JSON.parse(html.match(/<script id="report-data"[^>]*>([\s\S]*?)<\/script>/)[1]);
+  assert.deepEqual(embedded, reports);
+  for (const report of reports) assert.deepEqual(await loadReport(output, report.id), report);
+  run("node", [cli, "view", "--input", join(output, `${reports[0].id}.json`), "--out", join(output, "reopened")]);
+  const page = reviewPage(...embedded);
+  assert.equal(page["report-rows"].children.length, 30);
+  for (const repository of ["spf13/cobra", "microsoft/TypeScript", "nodejs/node", "elastic/elasticsearch"]) {
+    const index = reports.findIndex((report) => report.source.repository === repository);
+    page.report.value = String(index);
+    page.report.events.change();
+    assert.equal(page["source-link"].href, reports[index].source.url);
+    assert.equal(page["file-list"].children.length, reports[index].metrics.files);
+    assert.match(page.evidence.textContent, /Retained study evidence/);
+  }
+  const merge = reports.find((report) => report.source.repository === "elastic/elasticsearch");
+  assert.equal(merge.metrics.churn, 14);
+  const index = merge.commits.findIndex((commit) => commit.parentCount > 1);
+  page["commit-list"].children[index].children[0].events.click();
+  assert.match(page.comparison.textContent, /Merge context/);
+  assert.equal(merge.commits[index].metrics.churn, 25093);
+  assert.equal(page["file-list"].children.length, merge.commits[index].files.length);
+  page.shape.value = "binary";
+  page.shape.events.change();
+  assert.equal(page.empty.hidden, false);
+  for (const args of [
+    [], ["--input", corpusPath, "--input", corpusPath],
+  ]) {
+    assert.throws(() => run("node", [cli, "corpus", ...args, "--out", output]), /exactly one --input/);
+  }
+  assert.throws(() => run("node", [cli, "corpus", "--input", corpusPath, "--working", "--out", output]), /not valid for corpus/);
+  assert.throws(() => run("node", [cli, "view", "--input", corpusPath, "--out", output]), /immutable/);
 });

@@ -93,6 +93,44 @@ node --test test/*.test.mjs research/metrics.test.mjs
 
 ## Study data
 
+### Browse all 30 sample PRs
+
+Generate a standalone, offline gallery using the **same dashboard as the review
+canvas**, not the retired research preview:
+
+```sh
+node cli.mjs corpus --input research/corpus.json --out /tmp/sample-gallery
+open /tmp/sample-gallery/review.html
+```
+
+No GitHub authentication, network access, or sampled repository checkout is
+needed. The self-contained HTML includes all 30 PRs and their 61 original
+commits. The output also includes immutable report JSON files that can be
+reopened with `node cli.mjs view --input <report-id>.json --out <directory>`.
+
+Use **Report** to switch PRs, or expand **Compare reports** to search by
+repository or title and compare footprints. Select an original commit using
+**Scope** or **Original commits**; click a role bar to inspect its file receipts.
+For a quick tour, try these repositories:
+
+| Repository | What to look at |
+|---|---|
+| `spf13/cobra` | A one-file, one-line source change |
+| `nodejs/node` | A small test-only change |
+| `babel/babel` | A tiny source change alongside inputs and snapshots |
+| `microsoft/TypeScript` | 812 final changed files, snapshot-heavy work, and ten commits |
+| `angular/angular` | A deletion-heavy source change |
+| `elastic/elasticsearch` | 14 final changed lines versus 25,093 lines in an upstream merge context |
+
+These are retained collection-time snapshots, not fresh GitHub acquisitions.
+Patch completeness and lexical evidence come from the original collection;
+source and patches are not embedded or reverified on import. Human approval
+evidence is identified separately from raw bot-inclusive comment totals. The
+corpus is a convenience sample with no binary changes, not a demonstration of
+every possible PR shape or evidence of correctness, coverage, or review quality.
+
+### Retained research artifacts
+
 The separate research preview UI and builder have been retired in favour of
 the current review dashboard. The study data, probes, summary, report, and
 analyzer tests remain available. `research/browser-validation.json` records

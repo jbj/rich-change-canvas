@@ -1,5 +1,6 @@
 import { run, binary } from "./process.mjs";
 import { createReport } from "./report.mjs";
+import { analyzeSnapshot, compareSnapshots } from "./metric-analysis.mjs";
 
 export function githubApi(endpoint) {
   return JSON.parse(run("gh", ["api", endpoint]));
@@ -49,7 +50,7 @@ export function analyzePullRequest({ repository, number, maxCommits = 250,
       bytes = Buffer.from(object.content, "base64");
     }
     if (bytes.length !== content.size) throw new Error(`Incomplete blob bytes: ${path}`);
-    const result = { size: content.size, binary: binary(bytes) };
+    const result = { size: content.size, binary: binary(bytes), metrics: analyzeSnapshot(bytes, path) };
     blobs.set(key, result);
     return result;
   }
@@ -61,13 +62,11 @@ export function analyzePullRequest({ repository, number, maxCommits = 250,
         lines.filter((line) => line.startsWith("-")).length === file.deletions;
       let before = null;
       let after = null;
-      if (!complete || (!file.additions && !file.deletions)) {
-        if (file.status !== "added") {
-          if (!parentSha) throw new Error(`Missing parent for existing file: ${file.filename}`);
-          before = blob(file.previous_filename ?? file.filename, parentSha);
-        }
-        if (file.status !== "removed") after = blob(file.filename, headSha);
+      if (file.status !== "added") {
+        if (!parentSha) throw new Error(`Missing parent for existing file: ${file.filename}`);
+        before = blob(file.previous_filename ?? file.filename, parentSha);
       }
+      if (file.status !== "removed") after = blob(file.filename, headSha);
       const isBinary = before?.binary === true || after?.binary === true;
       const renameOnly = file.status === "renamed" && !file.additions && !file.deletions;
       return {
@@ -75,6 +74,9 @@ export function analyzePullRequest({ repository, number, maxCommits = 250,
         additions: isBinary ? 0 : file.additions, deletions: isBinary ? 0 : file.deletions,
         binary: isBinary, beforeBytes: before?.size ?? null, afterBytes: after?.size ?? null,
         patchState: isBinary ? "binary" : renameOnly ? "rename-only" : complete ? "complete" : "missing-or-truncated",
+        alternativeMetrics: compareSnapshots(
+          before?.metrics ?? analyzeSnapshot(null, file.previous_filename ?? file.filename),
+          after?.metrics ?? analyzeSnapshot(null, file.filename)),
         addedRustTestAttributes: file.filename.endsWith(".rs") ?
           lines.filter((line) => /^\+\s*#\[(?:\w+::)*test(?:\]|\()/.test(line)).length : 0,
         removedRustTestAttributes: file.filename.endsWith(".rs") ?

@@ -2,8 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, writeFile, rename, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { measure } from "./metrics.mjs";
+import { metricCatalog } from "./metric-analysis.mjs";
 
-export const ANALYZER_VERSION = "absolute-counts-v1";
+export const ANALYZER_VERSION = "selectable-metrics-v1";
 
 export function digest(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -13,7 +14,7 @@ export function createReport({ source, title, comparison, files, commits = [], l
   const measuredCommits = commits.map((commit) => ({ ...commit, metrics: measure(commit.files) }));
   const allMetrics = layers.length ? measure([...files, ...layers.flatMap((layer) => layer.files)]) : null;
   const report = {
-    schemaVersion: 1, analyzerVersion: ANALYZER_VERSION, source, title,
+    schemaVersion: 1, analyzerVersion: ANALYZER_VERSION, metricCatalog, source, title,
     comparison, metrics: measure(files), commits: measuredCommits,
     ...(allMetrics ? { allMetrics } : {}),
     layers: layers.map((layer) => ({ ...layer, metrics: measure(layer.files) })),

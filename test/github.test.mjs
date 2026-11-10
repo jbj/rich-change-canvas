@@ -99,6 +99,29 @@ test("Validation rejects unsafe repository and invalid number inputs", () => {
   assert.throws(() => analyzePullRequest({ repository: "test/repo", number: 0 }), /positive integer/);
 });
 
+test("Complete patches fetch full snapshots by default and reuse scalar measurements across scopes", () => {
+  const f = fixture();
+  const before = "# private_source_sentinel\nvalue = 1\n";
+  const after = "# private_source_sentinel\nif value:\n    pass\n";
+  const api = (path) => {
+    if (!path.includes("/contents/")) return f.api(path);
+    f.calls.push(path);
+    const text = path.endsWith("ref=head") ? after : before;
+    return { type: "file", size: Buffer.byteLength(text), encoding: "base64",
+      content: Buffer.from(text).toString("base64"), sha: "blob" };
+  };
+  f.file.filename = "main.py";
+  const report = analyzePullRequest({ repository: "test/repo", number: 1, api });
+  assert.equal(f.calls.filter((path) => path.includes("/contents/")).length, 3);
+  assert.equal(f.calls.filter((path) => path.endsWith("/contents/main.py?ref=head")).length, 1);
+  assert.equal(report.metrics.alternativeMetrics["decision-keywords"].before.value, 0);
+  assert.equal(report.metrics.alternativeMetrics["decision-keywords"].after.value, 1);
+  assert.equal(report.metrics.alternativeMetrics.bytes.after.value, Buffer.byteLength(after));
+  assert.equal(report.metrics.incomplete, 0);
+  assert.doesNotMatch(JSON.stringify(report), /private_source_sentinel/);
+  assert.throws(() => analyzePullRequest({ repository: "test/repo", number: 1, api, maxBlobBytes: 2 }), /Blob size limit/);
+});
+
 test("All 30 acquired PRs replay through the production adapter using their metadata", () => {
   const corpus = JSON.parse(readFileSync(new URL("../research/corpus.json", import.meta.url), "utf8"));
   for (const sample of corpus.samples) {

@@ -2,6 +2,7 @@ import { readFileSync, lstatSync, readlinkSync, realpathSync } from "node:fs";
 import { resolve, relative, sep } from "node:path";
 import { run, binary } from "./process.mjs";
 import { createReport, digest } from "./report.mjs";
+import { analyzeSnapshot, compareSnapshots } from "./metric-analysis.mjs";
 
 function reference(git, ref) {
   if (typeof ref !== "string" || !ref || ref.includes("\0")) throw new Error("An explicit base reference is required");
@@ -143,6 +144,12 @@ export function analyzeLocal({ cwd = process.cwd(), base, includeWorking = false
   const shas = entries ? entries.split("\n") : [];
   if (shas.length > maxCommits) throw new Error(`History has ${shas.length} commits; limit is ${maxCommits}`);
   const fingerprints = [];
+  const measurements = new Map();
+  function snapshot(revision, path, bytes) {
+    const key = `${revision}\0${path}`;
+    if (!measurements.has(key)) measurements.set(key, analyzeSnapshot(bytes, path));
+    return measurements.get(key);
+  }
 
   const readBlob = (revision, path, status, side) => {
     if ((side === "before" && status === "added") || (side === "after" && status === "removed")) return null;
@@ -179,6 +186,9 @@ export function analyzeLocal({ cwd = process.cwd(), base, includeWorking = false
         additions: isBinary ? 0 : entry.additions, deletions: isBinary ? 0 : entry.deletions,
         binary: isBinary, beforeBytes: left?.length ?? null, afterBytes: right?.length ?? null,
         patchState: isBinary ? "binary" : state.status === "renamed" && !entry.additions && !entry.deletions ? "rename-only" : "complete",
+        alternativeMetrics: compareSnapshots(
+          snapshot(before, state.previousPath ?? entry.path, left),
+          snapshot(after, entry.path, right)),
       };
     });
   }
@@ -214,7 +224,8 @@ export function analyzeLocal({ cwd = process.cwd(), base, includeWorking = false
       const text = isBinary ? "" : bytes.toString("utf8");
       const lines = text ? text.split("\n").length - (text.endsWith("\n") ? 1 : 0) : 0;
       return { path, previousPath: null, status: "added", additions: lines, deletions: 0,
-        binary: isBinary, beforeBytes: null, afterBytes: bytes.length, patchState: isBinary ? "binary" : "complete" };
+        binary: isBinary, beforeBytes: null, afterBytes: bytes.length, patchState: isBinary ? "binary" : "complete",
+        alternativeMetrics: compareSnapshots(analyzeSnapshot(null, path), snapshot("working", path, bytes)) };
     });
     layers.push({ id: "untracked", title: "Untracked files (not part of HEAD)", files: untrackedFiles });
     const ending = JSON.stringify(capture());

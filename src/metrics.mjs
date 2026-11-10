@@ -1,12 +1,6 @@
-export function languageForPath(path) {
-  for (const [language, pattern] of [
-    ["JavaScript", /\.[cm]?jsx?$/], ["TypeScript", /\.[cm]?tsx?$/],
-    ["Python", /\.pyi?$/], ["Go", /\.go$/], ["Rust", /\.rs$/], ["Java", /\.java$/],
-    ["C/C++", /\.(c|h|cc|cpp|cxx|hpp)$/], ["Kotlin", /\.kts?$/],
-    ["Shell", /\.(sh|bash)$/], ["SQL", /\.sql$/],
-  ]) if (pattern.test(path)) return language;
-  return null;
-}
+import { languageForPath } from "./languages.mjs";
+import { addAlternativeMetrics } from "./metric-analysis.mjs";
+export { languageForPath } from "./languages.mjs";
 
 const BINARY_EXTENSIONS = /\.(png|jpe?g|gif|webp|avif|bmp|ico|icns|cur|tiff?|psd|ai|pdf|woff2?|ttf|otf|eot|ttc|mp3|mp4|m4a|wav|ogg|oga|webm|mov|avi|flac|zip|gz|tgz|bz2|xz|zst|7z|tar|jar|war|ear|class|wasm|so|dylib|dll|exe|a|o|lib|obj|pyc|mo|pgo|bin|keystore|jks|p12|pfx|der|sqlite3?|db|npy|npz|parquet|pkl|pickle|xlsx?|docx?|pptx?|odt)$/i;
 const SOURCE_EXTENSIONS = /\.(c|h|cc|cpp|cxx|hpp|hh|hxx|inc|ipp|def|m|mm|[cm]?[jt]sx?|pyi?|pyx|pxd|pxi|go|rs|java|kt|kts|scala|groovy|clj|cljs|rb|php|pl|pm|lua|cs|fs|vb|swift|dart|ex|exs|erl|hrl|hs|ml|mli|elm|zig|nim|jl|r|coffee|vue|svelte|astro|sh|bash|zsh|fish|ps1|psm1|bat|cmd|awk|vim|el|sql|s|asm|wat|tq|proto|thrift|fbs|graphql|gql|g4|y|yy|l|ll|jflex|flex)$/i;
@@ -128,7 +122,7 @@ export function measure(files) {
   if (addedRustTestAttributes || removedRustTestAttributes) {
     observations.push(`Rust test-attribute patch lines: +${addedRustTestAttributes} / -${removedRustTestAttributes}; lexical evidence, not tests run`);
   }
-  return {
+  return addAlternativeMetrics({
     files: measuredFiles.length, additions, deletions, churn: additions + deletions,
     sourceChurn, supportChurn, categories, fileMetrics: measuredFiles,
     incomplete, otherFiles, observations,
@@ -136,5 +130,5 @@ export function measure(files) {
     binaryFiles: categories.binary?.files ?? 0,
     addedRustTestAttributes, removedRustTestAttributes,
     renames,
-  };
+  });
 }

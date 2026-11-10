@@ -163,3 +163,51 @@ test("First-parent merge context is labeled separately from the net footprint", 
   assert.ok(merge.files.some((file) => file.path === "upstream.go"));
   assert.notEqual(base, upstream);
 });
+
+test("Full-file metrics retain exact scope snapshots without retaining their source", (t) => {
+  const f = fixture(t);
+  const secretText = "private_fixture_source_sentinel";
+  f.write("file.py", `# ${secretText}\nvalue = 1\n`);
+  const base = f.commit("base");
+  f.write("file.py", `# ${secretText}\n\nif value:\n    pass\n`);
+  f.commit("change");
+  f.write("file.py", `# ${secretText}\n\n\nif value:\n    pass\n`);
+  f.git("add", "file.py");
+  f.write("file.py", `# ${secretText}\n\n\nif value:\n    if other:\n        pass\n`);
+  f.write("new.js", "test('example', () => {});\n");
+  const report = analyzeLocal({ cwd: f.root, base, includeWorking: true });
+  const whole = report.metrics.fileMetrics[0].alternativeMetrics;
+  assert.equal(whole["blank-share"].before.value, 0);
+  assert.equal(whole["blank-share"].after.value, 25);
+  assert.equal(whole["decision-keywords"].delta, 1);
+  assert.equal(whole.indentation.after.value, 4);
+  assert.deepEqual(report.commits[0].metrics.alternativeMetrics, report.metrics.alternativeMetrics);
+  const staged = report.layers[0].metrics.alternativeMetrics["blank-share"];
+  const working = report.layers[1].metrics.alternativeMetrics["blank-share"];
+  assert.equal(staged.before.value, 25);
+  assert.equal(staged.after.value, 40);
+  assert.equal(working.before.value, 40);
+  assert.ok(Math.abs(working.after.value - 100 / 3) < 1e-12);
+  assert.equal(report.layers[2].metrics.alternativeMetrics["test-markers"].after.value, 1);
+  assert.equal(report.allMetrics.alternativeMetrics["blank-share"].after.numerator, 5);
+  assert.equal(report.allMetrics.alternativeMetrics["blank-share"].after.denominator, 16);
+  assert.doesNotMatch(JSON.stringify(report), new RegExp(secretText));
+});
+
+test("Renames across language suffixes and removed files measure their own sides", (t) => {
+  const f = fixture(t);
+  f.write("old.py", "# comment\nvalue = 1\n");
+  f.write("removed.py", "if value:\n    pass\n");
+  const base = f.commit("base");
+  renameSync(join(f.root, "old.py"), join(f.root, "new.js"));
+  rmSync(join(f.root, "removed.py"));
+  f.commit("rename and remove");
+  const report = analyzeLocal({ cwd: f.root, base });
+  const renamed = report.metrics.fileMetrics.find((file) => file.path === "new.js");
+  assert.equal(renamed.status, "renamed");
+  assert.equal(renamed.alternativeMetrics["comment-share"].before.value, 50);
+  assert.equal(renamed.alternativeMetrics["comment-share"].after.value, 0);
+  const removed = report.metrics.fileMetrics.find((file) => file.path === "removed.py");
+  assert.equal(removed.alternativeMetrics["decision-keywords"].after.value, 0);
+  assert.equal(removed.alternativeMetrics["blank-share"].after.status, "not-applicable");
+});

@@ -46,17 +46,14 @@
     <div class="dashboard">
       <section class="panel footprint" aria-labelledby="footprint-heading">
         <h2 id="footprint-heading">Footprint <span class="muted">/ text lines</span></h2>
-        <div class="role-head muted"><span>Role · files</span><span>+added / −deleted</span><span>Churn</span></div>
-        <div id="category-rows"></div>
+        <table class="footprint-table">
+          <thead><tr><th>Role · files</th><th>+added / −deleted</th><th>Churn</th></tr></thead>
+          <tbody id="category-rows"></tbody>
+        </table>
         <p id="role-empty" class="muted" hidden>No changed files.</p>
         <p class="legend"><span class="added">+ added</span> <span class="deleted">− deleted</span> <span id="line-scale" class="muted"></span></p>
-        <button id="clear-category" hidden>Clear role filter</button>
       </section>
     </div>
-    <details id="files-panel" class="panel">
-      <summary id="files-heading">Files</summary>
-      <div id="file-list"></div>
-    </details>
     <details id="commits-panel" class="panel">
       <summary id="commits-heading">Original commits</summary>
       <div id="commit-list"></div>

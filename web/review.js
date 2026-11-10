@@ -63,7 +63,6 @@
   try {
     const reports = JSON.parse($("report-data").textContent);
     if (!Array.isArray(reports) || !reports.length) throw new Error("No reports were provided");
-    let category = null;
     const selected = () => reports[Number($("report").value)];
     const scope = () => {
       const report = selected();
@@ -82,7 +81,6 @@
       for (const [value, title, className] of [
         [String(metrics.files), "files", "accent"],
         [delta(metrics), "text lines", ""],
-        [String(metrics.largestFileChurn), "largest file · lines", ""],
         [String(metrics.binaryFiles), "binary files", "muted"],
       ]) {
         const stat = el("div", undefined, "stat");
@@ -93,33 +91,36 @@
         $("totals").append(stat);
       }
     }
-    function fileReceipts(metrics, current) {
-      const files = metrics.fileMetrics.filter((item) => !category || item.category === category);
-      $("files-heading").textContent = `Files / ${files.length}${category ? ` · ${roles[category]}` : ""} · expand receipts`;
-      $("clear-category").hidden = category === null;
-      for (const button of $("category-rows").children) {
-        button.setAttribute("aria-pressed", String(button.dataset.category === category));
+    function fileRow(file, maximum, url) {
+      const row = el("tr", undefined, "file-row");
+      row.dataset.filePath = file.path;
+      row.dataset.category = file.category;
+      row.hidden = true;
+      const details = el("details");
+      const summary = el("summary");
+      summary.append(el("code", file.path, "file-name"), el("span", file.status, "file-meta"));
+      details.append(summary);
+      if (file.previousPath) details.append(el("p", `Previous path: ${file.previousPath}`));
+      if (url) {
+        const diffLink = el("a", "Open diff ↗", "file-diff");
+        diffLink.href = url;
+        diffLink.target = "_blank";
+        diffLink.rel = "noreferrer noopener";
+        details.append(diffLink);
       }
-      $("file-list").replaceChildren();
-      const url = fileDiffUrl(selected(), current);
-      for (const file of files) {
-        const details = el("details");
-        const summary = el("summary");
-        summary.append(el("code", file.path, "file-name"),
-          el("span", `${roles[file.category]} · ${file.status} · `, "file-meta"),
-          file.binary ? el("span", `${file.beforeBytes ?? 0} → ${file.afterBytes ?? 0} bytes`, "count") : delta(file));
-        details.append(summary);
-        if (file.previousPath) details.append(el("p", `Previous path: ${file.previousPath}`));
-        if (url) {
-          const diffLink = el("a", "Open diff ↗", "file-diff");
-          diffLink.href = url;
-          diffLink.target = "_blank";
-          diffLink.rel = "noreferrer noopener";
-          details.append(diffLink);
-        }
-        $("file-list").append(details);
+      const pathCell = el("td");
+      pathCell.append(details);
+      const metricCell = el("td");
+      const barCell = el("td");
+      if (file.binary) {
+        metricCell.append(el("span", `${file.beforeBytes ?? 0} → ${file.afterBytes ?? 0} B`, "count"));
+      } else {
+        metricCell.append(delta(file));
+        barCell.append(bar([[file.additions, "bar-added"], [file.deletions, "bar-deleted"]],
+          maximum, `${file.path}: ${count(file)} text lines; logarithmic scale 0–${maximum}`));
       }
-      if (!files.length) $("file-list").append(el("p", "No changed files in this scope.", "muted"));
+      row.append(pathCell, metricCell, barCell);
+      return row;
     }
     function originalCommits(report) {
       $("commits-heading").textContent = `Original commits / ${report.commits.length} · inspect`;
@@ -154,36 +155,42 @@
       const maximum = Math.max(0, ...Object.entries(metrics.categories)
         .filter(([key]) => key !== "binary").map(([, metric]) => metric.additions + metric.deletions));
       $("line-scale").textContent = `Log scale · max ${maximum} lines · binary: bytes`;
+      const url = fileDiffUrl(report, current);
       for (const [key, metric] of Object.entries(metrics.categories)) {
-        const button = el("button", undefined, `role-row role-${key}`);
-        button.dataset.category = key;
-        button.setAttribute("aria-pressed", String(category === key));
-        button.setAttribute("aria-controls", "file-list");
-        button.append(el("span", `${roles[key]} · ${metric.files}`, "role-name"));
+        const categoryRow = el("tr", undefined, "category-row");
+        categoryRow.dataset.category = key;
+        const nameCell = el("td");
+        const toggle = el("button", `${roles[key]} · ${metric.files}`, `role-name role-${key}`);
+        toggle.setAttribute("aria-expanded", "false");
+        nameCell.append(toggle);
+        const metricCell = el("td");
+        const barCell = el("td");
         if (key === "binary") {
-          button.append(el("span", `${metric.beforeBytes} → ${metric.afterBytes} B`, "count"), el("span"));
+          metricCell.append(el("span", `${metric.beforeBytes} → ${metric.afterBytes} B`, "count"));
         } else {
-          button.append(delta(metric), bar([[metric.additions, "bar-added"], [metric.deletions, "bar-deleted"]],
+          metricCell.append(delta(metric));
+          barCell.append(bar([[metric.additions, "bar-added"], [metric.deletions, "bar-deleted"]],
             maximum, `${roles[key]}: ${count(metric)} text lines; logarithmic scale 0–${maximum}`));
         }
-        button.addEventListener("click", () => {
-          category = category === key ? null : key;
-          $("files-panel").open = true;
-          fileReceipts(metrics, scope());
+        categoryRow.append(nameCell, metricCell, barCell);
+        const files = metrics.fileMetrics.filter((file) => file.category === key);
+        const fileRows = files.map((file) => fileRow(file, maximum, url));
+        let expanded = false;
+        toggle.addEventListener("click", () => {
+          expanded = !expanded;
+          toggle.setAttribute("aria-expanded", String(expanded));
+          for (const row of fileRows) row.hidden = !expanded;
         });
-        $("category-rows").append(button);
+        $("category-rows").append(categoryRow, ...fileRows);
       }
       $("role-empty").hidden = metrics.files > 0;
-      fileReceipts(metrics, current);
       originalCommits(report);
     }
     function selectScope(key) {
       $("scope").value = key;
-      category = null;
       render();
     }
     function load(key) {
-      category = null;
       const report = selected();
       $("scope").replaceChildren();
       const add = (value, text) => { const option = el("option", text); option.value = value; $("scope").append(option); };
@@ -234,10 +241,9 @@
     $("report-control").hidden = reports.length === 1;
     $("reports-panel").hidden = reports.length === 1 && !reports[0].layers.some((layer) => layer.metrics.files);
     $("report").addEventListener("change", () => load());
-    $("scope").addEventListener("change", () => { category = null; render(); });
+    $("scope").addEventListener("change", render);
     $("search").addEventListener("input", desk);
     $("shape").addEventListener("change", desk);
-    $("clear-category").addEventListener("click", () => { category = null; fileReceipts(scope().metrics, scope()); });
     load(); desk();
   } catch (error) {
     $("error").textContent = `Unable to render report: ${error.message}`;

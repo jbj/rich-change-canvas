@@ -1,0 +1,912 @@
+{
+  "generatedBy": "research/survey-files.mjs",
+  "note": "Every path at each corpus sample's merge commit, classified by path only (blob contents not inspected).",
+  "repositories": 30,
+  "files": 393923,
+  "otherShare": 0.0028,
+  "categories": {
+    "test": 154409,
+    "source": 81212,
+    "snapshot": 66249,
+    "fixture": 54868,
+    "documentation": 14680,
+    "configuration": 5341,
+    "binary": 4187,
+    "manifest": 3308,
+    "markup": 2818,
+    "generated": 2279,
+    "localization": 1252,
+    "test-support": 1140,
+    "other": 1102,
+    "data": 761,
+    "lockfile": 317
+  },
+  "perRepository": [
+    {
+      "repository": "apache/lucene",
+      "language": "Java",
+      "sha": "c5ab3e57b9ba16433fa89dade2c2d4ad5fbb83e8",
+      "files": 7632,
+      "otherShare": 0.013,
+      "categories": {
+        "configuration": 145,
+        "source": 3969,
+        "documentation": 128,
+        "binary": 482,
+        "manifest": 59,
+        "other": 99,
+        "markup": 40,
+        "lockfile": 39,
+        "test": 2585,
+        "generated": 33,
+        "data": 18,
+        "fixture": 35
+      }
+    },
+    {
+      "repository": "mockito/mockito",
+      "language": "Java",
+      "sha": "220c594adceebf92a0d06e2fb1e4398b25344d46",
+      "files": 1142,
+      "otherShare": 0.0096,
+      "categories": {
+        "other": 11,
+        "configuration": 14,
+        "documentation": 17,
+        "manifest": 48,
+        "source": 503,
+        "markup": 2,
+        "binary": 4,
+        "test": 519,
+        "test-support": 24
+      }
+    },
+    {
+      "repository": "junit-team/junit-framework",
+      "language": "Java",
+      "sha": "668e48196bf7ffca9d5ef6856ec0137bc4402492",
+      "files": 2465,
+      "otherShare": 0.0093,
+      "categories": {
+        "configuration": 60,
+        "documentation": 123,
+        "source": 961,
+        "binary": 13,
+        "other": 23,
+        "manifest": 93,
+        "test": 1090,
+        "test-support": 102
+      }
+    },
+    {
+      "repository": "nodejs/node",
+      "language": "JavaScript",
+      "sha": "768315cf7165e9ff9b636844b776488e9d1703fc",
+      "files": 56823,
+      "otherShare": 0.0088,
+      "categories": {
+        "other": 498,
+        "configuration": 690,
+        "documentation": 1511,
+        "manifest": 1128,
+        "source": 22624,
+        "fixture": 7212,
+        "lockfile": 59,
+        "test": 22533,
+        "snapshot": 266,
+        "generated": 19,
+        "binary": 236,
+        "markup": 46,
+        "data": 1
+      }
+    },
+    {
+      "repository": "vitejs/vite",
+      "language": "TypeScript",
+      "sha": "a3b28e8744ffae9abd018696ad4fc01b27ac71ce",
+      "files": 2932,
+      "otherShare": 0.0075,
+      "categories": {
+        "configuration": 124,
+        "documentation": 144,
+        "binary": 91,
+        "source": 1225,
+        "manifest": 269,
+        "test": 246,
+        "markup": 494,
+        "snapshot": 7,
+        "fixture": 307,
+        "lockfile": 3,
+        "other": 22
+      }
+    },
+    {
+      "repository": "serde-rs/serde",
+      "language": "Rust",
+      "sha": "e65b3e742063c7353ff5b1feea61aef5030b92bc",
+      "files": 361,
+      "otherShare": 0.0055,
+      "categories": {
+        "configuration": 4,
+        "documentation": 22,
+        "manifest": 7,
+        "source": 58,
+        "other": 2,
+        "test": 268
+      }
+    },
+    {
+      "repository": "elastic/elasticsearch",
+      "language": "Java",
+      "sha": "c18f3ecd6394d7135eaeb8c6dceeb1674433b1f5",
+      "files": 51546,
+      "otherShare": 0.0039,
+      "categories": {
+        "configuration": 1262,
+        "documentation": 6067,
+        "source": 17357,
+        "manifest": 317,
+        "lockfile": 31,
+        "test": 22553,
+        "snapshot": 226,
+        "other": 199,
+        "binary": 608,
+        "fixture": 109,
+        "localization": 3,
+        "test-support": 802,
+        "markup": 1,
+        "generated": 1270,
+        "data": 741
+      }
+    },
+    {
+      "repository": "microsoft/vscode",
+      "language": "TypeScript",
+      "sha": "f08defa8eefb940e459851d077b90183ec0b9039",
+      "files": 21009,
+      "otherShare": 0.0035,
+      "categories": {
+        "documentation": 326,
+        "source": 10259,
+        "configuration": 826,
+        "other": 73,
+        "manifest": 128,
+        "test": 6013,
+        "markup": 761,
+        "binary": 327,
+        "lockfile": 9,
+        "fixture": 883,
+        "localization": 17,
+        "snapshot": 488,
+        "generated": 899
+      }
+    },
+    {
+      "repository": "prometheus/prometheus",
+      "language": "Go",
+      "sha": "bd517f6636ce1b6263dada9dfecb3fe92c84d96f",
+      "files": 1772,
+      "otherShare": 0.0023,
+      "categories": {
+        "documentation": 123,
+        "source": 689,
+        "test": 369,
+        "configuration": 51,
+        "other": 4,
+        "manifest": 12,
+        "fixture": 472,
+        "lockfile": 8,
+        "generated": 6,
+        "binary": 5,
+        "markup": 33
+      }
+    },
+    {
+      "repository": "pandas-dev/pandas",
+      "language": "Python",
+      "sha": "0d4ce2cf8c6d9805ad9cb5d993497a351572ec6c",
+      "files": 2691,
+      "otherShare": 0.0019,
+      "categories": {
+        "configuration": 38,
+        "documentation": 344,
+        "source": 529,
+        "other": 5,
+        "binary": 176,
+        "manifest": 12,
+        "markup": 23,
+        "test": 1563,
+        "lockfile": 1
+      }
+    },
+    {
+      "repository": "pytest-dev/pytest",
+      "language": "Python",
+      "sha": "1b6f4419c6fe9371a8d8c52c12ed0a1577c2504a",
+      "files": 643,
+      "otherShare": 0.0016,
+      "categories": {
+        "configuration": 25,
+        "other": 1,
+        "documentation": 308,
+        "manifest": 2,
+        "source": 94,
+        "binary": 9,
+        "test": 160,
+        "fixture": 43,
+        "lockfile": 1
+      }
+    },
+    {
+      "repository": "rust-lang/rust",
+      "language": "Rust",
+      "sha": "26453bcbe9980f58010fc3541dcd5eb0f87a0da2",
+      "files": 64366,
+      "otherShare": 0.0016,
+      "categories": {
+        "other": 104,
+        "configuration": 257,
+        "documentation": 1554,
+        "lockfile": 71,
+        "manifest": 285,
+        "source": 6662,
+        "markup": 27,
+        "test": 54025,
+        "fixture": 1241,
+        "snapshot": 84,
+        "binary": 53,
+        "generated": 3
+      }
+    },
+    {
+      "repository": "rust-lang/cargo",
+      "language": "Rust",
+      "sha": "d3bab3cff18a59d31c9de5f4bf20891a29d4a479",
+      "files": 3083,
+      "otherShare": 0.0013,
+      "categories": {
+        "configuration": 29,
+        "documentation": 333,
+        "lockfile": 31,
+        "manifest": 29,
+        "source": 364,
+        "other": 4,
+        "binary": 17,
+        "test": 2275,
+        "fixture": 1
+      }
+    },
+    {
+      "repository": "angular/angular",
+      "language": "TypeScript",
+      "sha": "b493d767a4bcf417dedcc6206c25afa8aae9ea17",
+      "files": 11715,
+      "otherShare": 0.0011,
+      "categories": {
+        "documentation": 720,
+        "source": 3784,
+        "configuration": 467,
+        "other": 13,
+        "manifest": 634,
+        "lockfile": 34,
+        "test": 4845,
+        "markup": 980,
+        "binary": 200,
+        "localization": 5,
+        "fixture": 25,
+        "snapshot": 8
+      }
+    },
+    {
+      "repository": "django/django",
+      "language": "Python",
+      "sha": "6675dac0ffbaf15eaf725324192de01dc2b17acb",
+      "files": 7097,
+      "otherShare": 0.0011,
+      "categories": {
+        "configuration": 36,
+        "documentation": 715,
+        "source": 1019,
+        "other": 8,
+        "manifest": 3,
+        "binary": 1337,
+        "localization": 1226,
+        "markup": 213,
+        "test": 2465,
+        "fixture": 75
+      }
+    },
+    {
+      "repository": "apache/kafka",
+      "language": "Java",
+      "sha": "5630099b63c0abc4abf35cfb9c2f3c21b3b97419",
+      "files": 7664,
+      "otherShare": 0.001,
+      "categories": {
+        "configuration": 418,
+        "documentation": 154,
+        "source": 4046,
+        "manifest": 18,
+        "other": 8,
+        "test": 2727,
+        "test-support": 212,
+        "markup": 4,
+        "fixture": 16,
+        "binary": 61
+      }
+    },
+    {
+      "repository": "webpack/webpack",
+      "language": "JavaScript",
+      "sha": "d5c26a2ff10f4479934e976576aca505ad7b6cb3",
+      "files": 29824,
+      "otherShare": 0.0007,
+      "categories": {
+        "documentation": 351,
+        "source": 1470,
+        "configuration": 108,
+        "markup": 53,
+        "other": 22,
+        "binary": 341,
+        "lockfile": 10,
+        "manifest": 10,
+        "test": 20795,
+        "snapshot": 755,
+        "fixture": 5909
+      }
+    },
+    {
+      "repository": "cli/cli",
+      "language": "Go",
+      "sha": "eeb44bc432c0107de002dadd34a61b4e2bd15882",
+      "files": 1545,
+      "otherShare": 0.0006,
+      "categories": {
+        "configuration": 57,
+        "documentation": 81,
+        "source": 631,
+        "test": 481,
+        "lockfile": 4,
+        "markup": 2,
+        "manifest": 5,
+        "fixture": 228,
+        "binary": 48,
+        "generated": 7,
+        "other": 1
+      }
+    },
+    {
+      "repository": "babel/babel",
+      "language": "JavaScript",
+      "sha": "5a38c3473b0d7a6d739ef0763073b899ea8690da",
+      "files": 29313,
+      "otherShare": 0.0001,
+      "categories": {
+        "configuration": 360,
+        "documentation": 197,
+        "source": 905,
+        "manifest": 169,
+        "other": 3,
+        "fixture": 17721,
+        "snapshot": 9234,
+        "test": 707,
+        "markup": 5,
+        "generated": 11,
+        "lockfile": 1
+      }
+    },
+    {
+      "repository": "typescript-eslint/typescript-eslint",
+      "language": "TypeScript",
+      "sha": "2b1f967c3fc54c924f96c6eaa3350ae9531f7069",
+      "files": 7342,
+      "otherShare": 0.0001,
+      "categories": {
+        "documentation": 306,
+        "test": 378,
+        "configuration": 117,
+        "source": 1041,
+        "manifest": 20,
+        "fixture": 1431,
+        "snapshot": 3972,
+        "binary": 21,
+        "markup": 54,
+        "other": 1,
+        "lockfile": 1
+      }
+    },
+    {
+      "repository": "prettier/prettier",
+      "language": "JavaScript",
+      "sha": "76cc42e1f7d616ebb548b9872e51c0bc3c2cecec",
+      "files": 9832,
+      "otherShare": 0,
+      "categories": {
+        "configuration": 46,
+        "documentation": 212,
+        "source": 745,
+        "manifest": 8,
+        "test": 2011,
+        "lockfile": 6,
+        "fixture": 5113,
+        "snapshot": 1543,
+        "binary": 83,
+        "markup": 65
+      }
+    },
+    {
+      "repository": "eslint/eslint",
+      "language": "JavaScript",
+      "sha": "8fe3ab9d9fb37595c6780839b1f3d02f30309b02",
+      "files": 2361,
+      "otherShare": 0,
+      "categories": {
+        "configuration": 40,
+        "documentation": 616,
+        "source": 454,
+        "test": 380,
+        "binary": 42,
+        "manifest": 3,
+        "markup": 2,
+        "fixture": 824
+      }
+    },
+    {
+      "repository": "microsoft/TypeScript",
+      "language": "TypeScript",
+      "sha": "1623a1991a9d669557235274316294ec1df25709",
+      "files": 68514,
+      "otherShare": 0,
+      "categories": {
+        "configuration": 67,
+        "documentation": 32,
+        "source": 930,
+        "manifest": 11,
+        "lockfile": 3,
+        "generated": 31,
+        "test": 4671,
+        "localization": 1,
+        "binary": 15,
+        "fixture": 13216,
+        "other": 1,
+        "snapshot": 49536
+      }
+    },
+    {
+      "repository": "pallets/flask",
+      "language": "Python",
+      "sha": "70d04b5a2620705011e65f79ccfd52caa86f5d6a",
+      "files": 234,
+      "otherShare": 0,
+      "categories": {
+        "configuration": 13,
+        "source": 36,
+        "documentation": 93,
+        "binary": 5,
+        "manifest": 5,
+        "markup": 12,
+        "test": 69,
+        "lockfile": 1
+      }
+    },
+    {
+      "repository": "psf/requests",
+      "language": "Python",
+      "sha": "021dc729f0b71a3030cefdbec7fb57a0e80a6cfd",
+      "files": 131,
+      "otherShare": 0,
+      "categories": {
+        "configuration": 13,
+        "documentation": 40,
+        "manifest": 6,
+        "binary": 11,
+        "markup": 1,
+        "source": 18,
+        "test": 42
+      }
+    },
+    {
+      "repository": "gin-gonic/gin",
+      "language": "Go",
+      "sha": "ea9fab99e01d55a5e4f8daacc0d11ccffaee0a15",
+      "files": 130,
+      "otherShare": 0,
+      "categories": {
+        "configuration": 12,
+        "documentation": 10,
+        "manifest": 2,
+        "source": 58,
+        "test": 40,
+        "lockfile": 1,
+        "fixture": 7
+      }
+    },
+    {
+      "repository": "go-gorm/gorm",
+      "language": "Go",
+      "sha": "b88148363a954f69fa680b152dfd96a94ffea1e1",
+      "files": 181,
+      "otherShare": 0,
+      "categories": {
+        "configuration": 13,
+        "documentation": 3,
+        "source": 66,
+        "test": 97,
+        "manifest": 1,
+        "lockfile": 1
+      }
+    },
+    {
+      "repository": "spf13/cobra",
+      "language": "Go",
+      "sha": "f2878bab8c96afd6e36968af96343b35dbb82a82",
+      "files": 66,
+      "otherShare": 0,
+      "categories": {
+        "configuration": 6,
+        "documentation": 25,
+        "manifest": 2,
+        "source": 14,
+        "test": 17,
+        "binary": 1,
+        "lockfile": 1
+      }
+    },
+    {
+      "repository": "tokio-rs/tokio",
+      "language": "Rust",
+      "sha": "e633c8f84fa01b92dcefb0e6d161dffab41e2361",
+      "files": 892,
+      "otherShare": 0,
+      "categories": {
+        "configuration": 20,
+        "documentation": 37,
+        "manifest": 13,
+        "source": 506,
+        "data": 1,
+        "test": 315
+      }
+    },
+    {
+      "repository": "clap-rs/clap",
+      "language": "Rust",
+      "sha": "8f4a01930b4e02a119a1e1f9ba70bd1e2fca44fc",
+      "files": 617,
+      "otherShare": 0,
+      "categories": {
+        "configuration": 23,
+        "documentation": 88,
+        "source": 195,
+        "lockfile": 1,
+        "manifest": 9,
+        "binary": 1,
+        "test": 170,
+        "snapshot": 130
+      }
+    }
+  ],
+  "topOtherExtensions": [
+    [
+      ".txt",
+      295
+    ],
+    [
+      "(none) DEPS",
+      40
+    ],
+    [
+      ".template",
+      32
+    ],
+    [
+      ".tcc",
+      22
+    ],
+    [
+      ".pem",
+      22
+    ],
+    [
+      ".t",
+      22
+    ],
+    [
+      ".in",
+      20
+    ],
+    [
+      ".ref",
+      19
+    ],
+    [
+      ".data",
+      16
+    ],
+    [
+      ".chromium",
+      16
+    ],
+    [
+      ".nix",
+      15
+    ],
+    [
+      ".xsd",
+      13
+    ],
+    [
+      ".tokens",
+      13
+    ],
+    [
+      ".exp",
+      11
+    ],
+    [
+      ".asn1",
+      11
+    ],
+    [
+      ".pdl",
+      10
+    ],
+    [
+      ".v8",
+      10
+    ],
+    [
+      ".github-issues",
+      10
+    ],
+    [
+      "(none) .clang-format",
+      9
+    ],
+    [
+      ".interp",
+      8
+    ],
+    [
+      ".rc",
+      6
+    ],
+    [
+      ".scm",
+      6
+    ],
+    [
+      "(none) configure",
+      5
+    ],
+    [
+      ".ac",
+      5
+    ],
+    [
+      ".tmpl",
+      5
+    ],
+    [
+      ".ctags",
+      5
+    ],
+    [
+      "(none) .clang-tidy",
+      5
+    ],
+    [
+      ".map",
+      5
+    ],
+    [
+      ".0",
+      5
+    ],
+    [
+      ".cnf",
+      4
+    ],
+    [
+      ".com",
+      4
+    ],
+    [
+      ".num",
+      4
+    ],
+    [
+      ".mod",
+      4
+    ],
+    [
+      ".sha1",
+      4
+    ],
+    [
+      ".natvis",
+      4
+    ],
+    [
+      ".asciidoc",
+      4
+    ],
+    [
+      "(none) compile",
+      3
+    ],
+    [
+      ".guess",
+      3
+    ],
+    [
+      ".sub",
+      3
+    ],
+    [
+      "(none) depcomp",
+      3
+    ]
+  ],
+  "topOtherDirectories": [
+    [
+      "nodejs/node:deps/v8",
+      154
+    ],
+    [
+      "nodejs/node:deps/openssl",
+      129
+    ],
+    [
+      "apache/lucene:lucene/analysis",
+      74
+    ],
+    [
+      "elastic/elasticsearch:x-pack/plugin",
+      63
+    ],
+    [
+      "elastic/elasticsearch:libs/grok",
+      43
+    ],
+    [
+      "elastic/elasticsearch:modules/lang-painless",
+      43
+    ],
+    [
+      "rust-lang/rust:src/tools",
+      38
+    ],
+    [
+      "nodejs/node:deps/libffi",
+      26
+    ],
+    [
+      "elastic/elasticsearch:build-tools-internal/src",
+      24
+    ],
+    [
+      "nodejs/node:deps/LIEF",
+      22
+    ],
+    [
+      "nodejs/node:deps/ngtcp2",
+      22
+    ],
+    [
+      "junit-team/junit-framework:platform-tooling-support-tests/projects",
+      20
+    ],
+    [
+      "nodejs/node:deps/crates",
+      19
+    ],
+    [
+      "rust-lang/rust:library/stdarch",
+      19
+    ],
+    [
+      "nodejs/node:deps/cares",
+      14
+    ],
+    [
+      "nodejs/node:deps/corepack",
+      14
+    ],
+    [
+      "webpack/webpack:examples/build-http",
+      14
+    ],
+    [
+      "rust-lang/rust:src/etc",
+      14
+    ],
+    [
+      "nodejs/node:deps/inspector_protocol",
+      13
+    ],
+    [
+      "microsoft/vscode:src/vs",
+      12
+    ],
+    [
+      "nodejs/node:tools/nix",
+      11
+    ],
+    [
+      "microsoft/vscode:.vscode/notebooks",
+      10
+    ],
+    [
+      "microsoft/vscode:resources/linux",
+      10
+    ],
+    [
+      "nodejs/node:deps/zlib",
+      9
+    ],
+    [
+      "nodejs/node:src/inspector",
+      9
+    ],
+    [
+      "apache/lucene:gradle/validation",
+      9
+    ],
+    [
+      "vitejs/vite:playground/fs-serve",
+      8
+    ],
+    [
+      "nodejs/node:.",
+      6
+    ],
+    [
+      "nodejs/node:deps/uv",
+      6
+    ],
+    [
+      "nodejs/node:tools/inspector_protocol",
+      6
+    ],
+    [
+      "rust-lang/rust:src/ci",
+      6
+    ],
+    [
+      "nodejs/node:deps/npm",
+      5
+    ],
+    [
+      "microsoft/vscode:build",
+      5
+    ],
+    [
+      "microsoft/vscode:build/checksums",
+      5
+    ],
+    [
+      "microsoft/vscode:extensions/vscode-api-tests",
+      5
+    ],
+    [
+      "angular/angular:adev/src",
+      5
+    ],
+    [
+      "rust-lang/rust:compiler/rustc_codegen_cranelift",
+      5
+    ],
+    [
+      "rust-lang/rust:src",
+      5
+    ],
+    [
+      "apache/lucene:lucene/queryparser",
+      5
+    ],
+    [
+      "elastic/elasticsearch:distribution/packages",
+      5
+    ]
+  ]
+}

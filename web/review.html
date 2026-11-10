@@ -18,12 +18,13 @@
   <div class="toolbar">
     <label id="report-control">Report <select id="report"></select></label>
     <label class="scope-control">Scope <select id="scope"></select></label>
+    <label>Metric <select id="metric"></select></label>
     <a id="source-link" target="_blank" rel="noreferrer noopener" hidden>PR ↗</a>
     <a id="commit-link" target="_blank" rel="noreferrer noopener" hidden>Commit ↗</a>
   </div>
   <p id="scope-note" class="muted"></p>
   <details id="reports-panel" class="panel" hidden>
-    <summary>Compare reports <span class="muted">/ independent scopes, not additive</span></summary>
+    <summary>Compare reports <span class="muted">/ text lines · independent scopes, not additive</span></summary>
     <div class="toolbar">
       <label>Find <input id="search" type="search" placeholder="Repository or title"></label>
       <label>Shape <select id="shape">
@@ -45,13 +46,14 @@
     <div id="totals" class="totals"></div>
     <div class="dashboard">
       <section class="panel footprint" aria-labelledby="footprint-heading">
-        <h2 id="footprint-heading">Footprint <span class="muted">/ text lines</span></h2>
+        <h2 id="footprint-heading">Footprint <span id="metric-heading" class="muted">/ text lines</span></h2>
+        <p id="metric-note" class="muted"></p>
         <table class="footprint-table">
-          <thead><tr><th>Role · files</th><th>+added / −deleted</th><th>Churn</th><th class="table-spacer" aria-hidden="true"></th></tr></thead>
+          <thead><tr><th>Role · files</th><th id="value-heading">+added / −deleted</th><th id="bar-heading">Churn</th><th class="table-spacer" aria-hidden="true"></th></tr></thead>
           <tbody id="category-rows"></tbody>
         </table>
         <p id="role-empty" class="muted" hidden>No changed files.</p>
-        <p class="legend"><span class="added">+ added</span> <span class="deleted">− deleted</span> <span id="line-scale" class="muted"></span></p>
+        <p class="legend"><span id="legend-before" class="added">+ added</span> <span id="legend-after" class="deleted">− deleted</span> <span id="line-scale" class="muted"></span></p>
       </section>
     </div>
     <details id="commits-panel" class="panel">

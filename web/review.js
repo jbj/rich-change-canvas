@@ -104,6 +104,78 @@
   try {
     const reports = JSON.parse($("report-data").textContent);
     if (!Array.isArray(reports) || !reports.length) throw new Error("No reports were provided");
+    const definitions = new Map([["lines", { id: "lines", label: "Added / deleted text lines",
+      tier: "Language-independent", unit: "lines", mode: "churn",
+      description: "Added/deleted physical text lines, including blanks and comments. Binary bytes are separate." }]]);
+    for (const report of reports) for (const definition of report.metricCatalog ?? []) {
+      if (!definitions.has(definition.id)) definitions.set(definition.id, definition);
+    }
+    const metric = () => selected().metricCatalog?.find((definition) => definition.id === $("metric").value) ??
+      definitions.get($("metric").value);
+    const isLines = () => metric().mode === "churn";
+    const numeric = (value) => Number(value.toFixed(2)).toLocaleString("en-US");
+    const number = (value) => value === null || value === undefined ? "N/A" : numeric(value);
+    const evidence = (target) => target.alternativeMetrics?.[metric().id];
+    function sideText(side) {
+      if (!side) return "Unavailable";
+      if (side.value === null) return side.status === "missing-content" ? "Unavailable" : "N/A";
+      return `${number(side.value)}${side.status === "partial" ? " (partial)" : ""}`;
+    }
+    function availability(result) {
+      if (!result) return "Metric was not measured in this report; reacquire to measure.";
+      if (metric().mode === "distribution") return result.reasons.join(" ");
+      return ["before", "after"].map((side) => {
+        const entry = result[side];
+        if (!entry) return `${side}: unavailable`;
+        return `${side}: ${entry.measured}/${entry.eligible} eligible files measured; ${entry.status}${entry.reasons.length ? `; ${entry.reasons.join(" ")}` : ""}`;
+      }).join(". ");
+    }
+    function metricValue(target) {
+      if (isLines()) return delta(target);
+      const result = evidence(target);
+      const node = el("span", undefined, "count");
+      node.setAttribute("title", availability(result));
+      if (metric().mode === "distribution") {
+        node.textContent = `${number(result?.value)} ${metric().unit}`;
+      } else {
+        const change = result?.delta;
+        node.textContent = `${sideText(result?.before)} → ${sideText(result?.after)} ${metric().unit}` +
+          (change === null || change === undefined ? "" : ` (Δ ${change > 0 ? "+" : ""}${number(change)})`);
+      }
+      return node;
+    }
+    function metricBar(target, maximum, label) {
+      const result = evidence(target);
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("class", "mini-bar");
+      svg.setAttribute("viewBox", "0 0 100 8");
+      svg.setAttribute("role", "img");
+      svg.setAttribute("aria-label", `${label}: ${metricValue(target).textContent}; linear scale 0–${number(maximum)} ${metric().unit}. ${availability(result)}`);
+      const parts = metric().mode === "distribution" ? [[result?.value, "bar-share", 0, 8]] :
+        [[result?.before?.value, "bar-before", 0, 3], [result?.after?.value, "bar-after", 5, 3]];
+      for (const [value, className, y, height] of parts) {
+        if (value === null || value === undefined) continue;
+        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        rect.setAttribute("x", "0");
+        rect.setAttribute("y", String(y));
+        rect.setAttribute("height", String(height));
+        rect.setAttribute("width", String(maximum ? Math.min(100, value / maximum * 100) : 0));
+        rect.setAttribute("class", className);
+        svg.append(rect);
+      }
+      return svg;
+    }
+    function metricMaximum(metrics) {
+      if (isLines()) return Math.max(0, ...Object.entries(metrics.categories)
+        .filter(([key]) => key !== "binary").map(([, group]) => group.additions + group.deletions));
+      if (metric().unit === "%") return 100;
+      let maximum = 0;
+      for (const target of [...Object.values(metrics.categories), ...metrics.fileMetrics]) {
+        const result = evidence(target);
+        maximum = Math.max(maximum, result?.before?.value ?? 0, result?.after?.value ?? 0);
+      }
+      return maximum;
+    }
     const selected = () => reports[Number($("report").value)];
     const scope = () => {
       const report = selected();
@@ -126,16 +198,28 @@
     };
     function totals(metrics) {
       $("totals").replaceChildren();
+      const result = evidence(metrics);
+      let summary = String(metrics.binaryFiles), summaryLabel = "binary files";
+      if (!isLines()) {
+        summary = availability(result);
+        summaryLabel = "measurement coverage";
+        if (metric().mode === "distribution") {
+          summaryLabel = "concentration";
+          if (result && result.value !== null) {
+            summary = `Largest file ${number(result.largestShare)}% · entropy ${number(result.entropy)} bits`;
+          }
+        }
+      }
       for (const [value, title, className] of [
         [String(metrics.files), "files", "accent"],
-        [delta(metrics), "text lines", ""],
-        [String(metrics.binaryFiles), "binary files", "muted"],
+        [metricValue(metrics), isLines() ? "text lines" : metric().label, ""],
+        [summary, summaryLabel, "muted"],
       ]) {
         const stat = el("div", undefined, "stat");
-        const number = el("span", undefined, `num ${className}`);
-        if (typeof value === "string") number.textContent = value;
-        else number.append(value);
-        stat.append(number, el("span", title, "stat-label"));
+        const valueNode = el("span", undefined, `num ${className}${["measurement coverage", "concentration"].includes(title) ? " coverage" : ""}`);
+        if (typeof value === "string") valueNode.textContent = value;
+        else valueNode.append(value);
+        stat.append(valueNode, el("span", title, "stat-label"));
         $("totals").append(stat);
       }
     }
@@ -172,7 +256,10 @@
       const metricCell = el("td");
       const barCell = el("td");
       const spacer = spacerCell();
-      if (file.binary) {
+      if (!isLines()) {
+        metricCell.append(metricValue(file));
+        barCell.append(metricBar(file, maximum, file.path));
+      } else if (file.binary) {
         metricCell.append(el("span", `${file.beforeBytes ?? 0} → ${file.afterBytes ?? 0} B`, "count"));
       } else {
         metricCell.append(delta(file));
@@ -183,7 +270,7 @@
       return { row, diffRow, details };
     }
     function originalCommits(report) {
-      $("commits-heading").textContent = `Original commits / ${report.commits.length} · inspect`;
+      $("commits-heading").textContent = `Original commits / ${report.commits.length} · inspect · text lines`;
       $("commit-list").replaceChildren();
       const commitMaximum = Math.max(0, ...report.commits.map((commit) => commit.metrics.churn));
       for (const [index, commit] of report.commits.entries()) {
@@ -203,8 +290,12 @@
       }
       if (!report.commits.length) $("commit-list").append(el("p", "No commits between merge base and HEAD.", "muted"));
     }
-    function render() {
+    function render(preserveRoles = false) {
+      const expandedRoles = new Set(preserveRoles === true ? Array.from($("category-rows").children)
+        .filter((row) => row.dataset.expanded === "true").map((row) => row.dataset.category) : []);
       const report = selected(), current = scope(), metrics = current.metrics;
+      $("overview").dataset.metricMode = metric().mode;
+      $("overview").className = isLines() ? "" : "alternative-metric";
       $("review-title").textContent = `${report.source.repository} / ${report.title}`;
       $("scope-note").textContent = report.layers.length ?
         "All combines independent committed / staged / unstaged / untracked snapshots. Counts are not additive; paths may repeat." :
@@ -212,20 +303,36 @@
       link($("commit-link"), current.url);
       totals(metrics);
       $("category-rows").replaceChildren();
-      const maximum = Math.max(0, ...Object.entries(metrics.categories)
-        .filter(([key]) => key !== "binary").map(([, metric]) => metric.additions + metric.deletions));
-      $("line-scale").textContent = `Log scale · max ${maximum} lines · binary: bytes`;
+      const maximum = metricMaximum(metrics);
+      $("metric-heading").textContent = `/ ${metric().label}`;
+      $("metric-note").textContent = `${metric().tier} · ${metric().description}` +
+        (isLines() || metric().mode === "distribution" ? "" :
+          " Whole changed-file snapshots, not only edited lines. Before/after deltas are not safety or quality scores.");
+      $("value-heading").textContent = isLines() ? "+added / −deleted" :
+        metric().mode === "distribution" ? "Share of scope" : "Before → after (Δ)";
+      $("bar-heading").textContent = isLines() ? "Churn" : metric().mode === "distribution" ? "Share" : "Snapshots";
+      $("legend-before").textContent = isLines() ? "+ added" : metric().mode === "distribution" ? "scope share" : "before (top)";
+      $("legend-after").textContent = isLines() ? "− deleted" : metric().mode === "distribution" ? "" : "after (bottom)";
+      $("legend-before").className = isLines() ? "added" : "snapshot-before";
+      $("legend-after").className = isLines() ? "deleted" : "snapshot-after";
+      $("line-scale").textContent = isLines() ? `Log scale · max ${maximum} lines · binary: bytes` :
+        `Linear scale · 0–${number(maximum)} ${metric().unit}`;
       const url = fileDiffUrl(report, current);
       for (const [key, metric] of Object.entries(metrics.categories)) {
         const categoryRow = el("tr", undefined, "category-row");
         categoryRow.dataset.category = key;
+        let expanded = expandedRoles.has(key);
+        categoryRow.dataset.expanded = String(expanded);
         const nameCell = el("td");
         const toggle = el("button", `${roles[key]} · ${metric.files}`, `role-name role-${key}`);
-        toggle.setAttribute("aria-expanded", "false");
+        toggle.setAttribute("aria-expanded", String(expanded));
         nameCell.append(toggle);
         const metricCell = el("td");
         const barCell = el("td");
-        if (key === "binary") {
+        if (!isLines()) {
+          metricCell.append(metricValue(metric));
+          barCell.append(metricBar(metric, maximum, roles[key]));
+        } else if (key === "binary") {
           metricCell.append(el("span", `${metric.beforeBytes} → ${metric.afterBytes} B`, "count"));
         } else {
           metricCell.append(delta(metric));
@@ -233,16 +340,18 @@
             maximum, `${roles[key]}: ${count(metric)} text lines; logarithmic scale 0–${maximum}`));
         }
         categoryRow.append(nameCell, metricCell, barCell, spacerCell());
-        let expanded = false;
         const fileRows = metrics.fileMetrics
           .map((file, fileIndex) => ({ file, fileIndex }))
           .filter(({ file }) => file.category === key)
           .map(({ file, fileIndex }) => {
             const diffScope = current.fileScopes?.[fileIndex] ?? current.key;
-            return fileRow(file, maximum, url, diffScope, () => expanded);
+            const result = fileRow(file, maximum, url, diffScope, () => expanded);
+            result.row.hidden = !expanded;
+            return result;
           });
         toggle.addEventListener("click", () => {
           expanded = !expanded;
+          categoryRow.dataset.expanded = String(expanded);
           toggle.setAttribute("aria-expanded", String(expanded));
           for (const { row, diffRow, details } of fileRows) {
             row.hidden = !expanded;
@@ -308,10 +417,24 @@
       $("report").append(option);
     }
     $("report").value = "0";
+    const groups = new Map();
+    for (const definition of definitions.values()) {
+      if (!groups.has(definition.tier)) {
+        const group = el("optgroup");
+        group.setAttribute("label", definition.tier);
+        groups.set(definition.tier, group);
+        $("metric").append(group);
+      }
+      const option = el("option", definition.label);
+      option.value = definition.id;
+      groups.get(definition.tier).append(option);
+    }
+    $("metric").value = "lines";
     $("report-control").hidden = reports.length === 1;
     $("reports-panel").hidden = reports.length === 1 && !reports[0].layers.some((layer) => layer.metrics.files);
     $("report").addEventListener("change", () => load());
     $("scope").addEventListener("change", render);
+    $("metric").addEventListener("change", () => render(true));
     $("search").addEventListener("input", desk);
     $("shape").addEventListener("change", desk);
     load(); desk();

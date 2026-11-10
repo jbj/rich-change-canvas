@@ -94,6 +94,19 @@ label { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 1
 .bar-track { fill: var(--panel); }
 .bar-added { fill: var(--green); }
 .bar-deleted { fill: var(--red); }
+.bar-before { fill: var(--muted); }
+.bar-after, .bar-share { fill: var(--blue); }
+.snapshot-before { color: var(--muted); }
+.snapshot-after { color: var(--blue); }
+#metric-note { font-size: 10px; line-height: 15px; margin: 0 0 8px; }
+.num.coverage { font: inherit; font-size: 10px; line-height: 15px; max-width: 44em; }
+.alternative-metric .count { white-space: normal; }
+.alternative-metric .footprint-table { table-layout: fixed; }
+.alternative-metric .footprint-table th:nth-child(1),
+.alternative-metric .footprint-table td:nth-child(1) { width: 38%; }
+.alternative-metric .footprint-table th:nth-child(2),
+.alternative-metric .footprint-table td:nth-child(2) { width: calc(62% - 80px); white-space: normal; overflow-wrap: anywhere; }
+.alternative-metric .footprint-table .table-spacer { width: 0; }
 .legend { display: flex; flex-wrap: wrap; gap: 0 8px; font-size: 9px; line-height: 14px; margin: 6px 0 0; }
 details > summary { cursor: pointer; overflow-wrap: anywhere; }
 details > summary:hover { text-decoration: underline; text-underline-offset: 2px; }
@@ -131,4 +144,6 @@ footer { font-size: 9px; line-height: 14px; margin-top: 8px; }
 }
 @media (max-width: 400px) {
   .footprint-table th:nth-child(3), .footprint-table td:nth-child(3) { display: none; }
+  .alternative-metric .footprint-table th:nth-child(2),
+  .alternative-metric .footprint-table td:nth-child(2) { width: 62%; }
 }

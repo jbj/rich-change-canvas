@@ -33,7 +33,8 @@ export function measured(plugin, raw) {
     throw new Error(`Invalid metric measurement: ${plugin.id}`);
   }
   const value = valueFor(plugin, raw.numerator, raw.denominator);
-  return { ...raw, value, status: value === null ? "not-applicable" : "available",
+  return { numerator: raw.numerator, denominator: raw.denominator,
+    value, status: value === null ? "not-applicable" : "available",
     eligible: 1, measured: 1, reasons: value === null ? ["No eligible physical lines."] : [] };
 }
 

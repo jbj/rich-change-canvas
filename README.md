@@ -36,6 +36,14 @@ repository's absolute path. Treat reports from private repositories as private.
 Saved content identity is verified when saving and reopening; it detects
 accidental edits, not the authenticity of the producer.
 
+New reports also retain scalar before/after metric evidence. GitHub acquisition
+now fetches full blobs by default, even for complete text patches, so it makes
+more API requests than the original diffstat-only analyzer. Measurements are
+reused by revision/path across scopes; source bytes are discarded after
+measurement, not cached in reports. Both sides of every existing file version
+must be accessible; acquisition errors remain explicit rather than producing
+incomplete success-shaped results.
+
 The **change review dashboard** puts scope controls, coloured line deltas,
 miniature role bars, and collapsible commits on one compact screen, without tabs.
 Expand a role to see its file list in the same diffstat columns; expand a file
@@ -64,10 +72,126 @@ missing blobs can prevent complete acquisition. Blob classification uses NUL
 bytes or failed strict UTF-8 decoding. No repository programs, filters, builds,
 or workflows are executed; Git external diffs and text conversion are disabled.
 
-The baseline provides deterministic **file-level evidence only**. Structural
-analysis is visibly unavailable, not zero. GitHub discussion totals in new
+The analyzer provides deterministic **file/snapshot and lexical evidence only**.
+Syntax/structural analysis is visibly unavailable, not zero. GitHub discussion totals in new
 reports include bots and do not claim verified human approvals; the curated
 study below has separate, stronger review-selection evidence.
+
+## Selectable metrics
+
+Use **Metric** next to Scope to switch the existing totals, role table, expanded
+file rows, and bars. Added/deleted text lines remain the default. Metric changes
+preserve expanded roles; report/scope changes preserve the metric selection.
+Original-commit mini-bars and Compare reports remain explicitly labeled
+text-line navigation summaries.
+
+Snapshot metrics measure **whole before/after versions of changed files**, not
+only edited lines. They show before → after and signed delta; these are not
+quality scores. Their neutral bars show before on top and after underneath,
+with a shared linear scale. Percentages always use 0–100; the original LoC
+bars retain their logarithmic churn scale.
+
+| Language-independent metric | Definition / role and scope aggregation |
+|---|---|
+| Byte size | Full blob bytes, including binary files; sum. Not compiled program size. |
+| Blank-line share | Whitespace-only physical lines / all physical lines. |
+| Mean line length | Unicode code points / physical lines, excluding LF/CRLF terminators; weighted mean. |
+| Maximum line length | Maximum code points on a physical line; maximum, not sum. |
+| Long-line share | Lines longer than 120 code points / physical lines. |
+| Trailing-whitespace share | Lines ending in a space or tab / physical lines. |
+| Maximum textual indentation | Leading space/tab columns on nonblank lines; tabs advance to four-column stops. Not syntax nesting. |
+| Repeated-line share | Occurrences beyond the first of trimmed nonblank lines **within each file** / nonblank lines. Not code-clone detection. |
+| Churn share | Fraction of the selected scope's added + deleted text lines. Scope totals also show largest-file share and Shannon entropy across files, in bits. |
+
+Ratios sum numerators and denominators rather than averaging file percentages.
+Empty files have zero bytes and zero maxima, but no defined line-based ratio or
+mean. A final newline does not create an extra physical line. Empty additions
+and removals use an empty snapshot for the absent side. Binary/non-UTF-8
+snapshots support bytes but not text metrics. Zero-churn renames have no defined
+churn share or concentration.
+
+The **Regex heuristic** group supports JavaScript, TypeScript, Python, Go, Rust,
+and Java:
+
+| Regex metric | What is counted |
+|---|---|
+| Comment-looking-line share | Lines starting with Python `#` or other languages' `//`, `/*`, `*`, `*/`, divided by supported physical lines. Python docstrings are excluded. |
+| Decision keywords | `if`, `for`, `while`, language-specific `case`/`catch`/`except`/`match`/`select`, boolean operators, and JS/TS `??`. Ternary punctuation is excluded. **Not cyclomatic complexity.** |
+| Declaration-like lines | Language-specific function/type declaration patterns. JS/TS methods and arrows are excluded; Java methods require a modifier. Not an exact symbol count. |
+| Import-like lines | Import/from/use/require directives; grouped/multiline imports may count only their opening line. Not semantic coupling. |
+| Test markers | JS/TS test/it/describe calls, Python test definitions, Go Test/Benchmark/Fuzz functions, Rust test attributes, Java test annotations. Not test execution or coverage. |
+
+These are intentionally simple regexes, not a lexer: strings, comments,
+multiline declarations, macros, and language variants can produce false
+positives and negatives. The selected metric displays its definition and
+limitations. Whole-file Rust markers are separate from the retained research
+corpus's Rust patch-line evidence.
+
+Coverage reports measured/eligible files independently for each side.
+Unsupported languages and binary text snapshots are excluded; missing source
+is unavailable, not zero. Partial aggregates are marked **partial**. Older
+saved reports and the retained corpus cannot recover content-based metrics
+offline: reacquire the changes for those measurements. Their known metadata
+still supports churn shares and any recorded byte sizes. Rendering an old
+report does not change its saved content or immutable identity.
+
+**All** still combines independent committed/staged/unstaged/untracked snapshot
+comparisons, not a reconstructed net diff. Paths and file versions can repeat;
+its metric aggregates are over those comparisons, not unique repository files.
+
+### In-repository metric plugins
+
+`src/metric-plugins/` is the isolated language-independent plugin layer. Its
+modules only import siblings: no Git/GitHub, filesystem, report/UI, language
+detection, or regex-language dependencies. `index.mjs` explicitly registers
+trusted checked-in plugins; analyzed repositories cannot supply executable
+plugins. No external plugin loader or package installation is involved.
+
+Each snapshot plugin declares `id`, `version`, `label`, `unit`, `description`,
+`tier`, `mode: "snapshot"`, `textOnly`, `reducer`, and a pure `measure(snapshot)`
+function. For example, an additional nonblank-line experiment could export:
+
+```js
+export const nonblank = {
+  id: "nonblank-lines", version: 1, label: "Nonblank lines", unit: "lines",
+  description: "Nonblank physical lines; not statements or semantic LoC.",
+  tier: "Language-independent", mode: "snapshot", textOnly: true, reducer: "sum",
+  measure: ({ shape }) => ({
+    numerator: shape.lines.length - shape.blank,
+    denominator: 1,
+  }),
+};
+```
+
+Import it into `snapshotPlugins` in `src/metric-plugins/index.mjs`; the catalog
+and metric picker are derived automatically. Available reducers are `sum`,
+`max`, `mean` (sum numerator / sum denominator), and `ratio` (the same, × 100).
+`snapshot.bytes` and prepared `snapshot.shape` are ephemeral; return only finite,
+nonnegative scalar sufficient statistics, never text or identifiers. Add
+focused fixtures in `test/metric-plugins.test.mjs`, including empty input and
+aggregation. Bump the plugin version when its definition changes. Recomputing
+with a different version marks incompatible saved evidence unavailable and
+requires reacquisition; archived results retain their saved definitions.
+
+`changePlugins` handles scope-relative distributions. The separate
+`src/regex-metrics/` provider uses the same snapshot protocol but owns its
+language rules. `src/metric-analysis.mjs` binds providers, availability,
+aggregation and serializable metadata; acquisition and the UI do not contain
+metric-specific formulas.
+
+### Later: syntax-aware metrics
+
+A tree-sitter provider could add function/class counts, function sizes,
+syntactic nesting, changed declarations, parsed comment density, and
+per-function cyclomatic or ABC-style counts. It must parse full before/after
+files and define language-specific node rules, grammar support, parse-error
+handling and declaration matching. The shared result protocol can carry those
+results without putting language rules into independent plugins.
+
+Tree-sitter is **not implemented yet**. Parsing alone cannot establish semantic
+cohesion/coupling, execution time, defects, function points, or test coverage.
+Halstead and maintainability-index experiments also need agreed tokenization
+and formulas; they are not inferred from regex keyword counts.
 
 ## Open the review in GitHub Copilot
 

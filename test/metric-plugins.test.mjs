@@ -82,6 +82,7 @@ test("Churn shares, concentration and entropy use the selected scope, including 
 test("Plugin validation rejects bad evidence, and language-independent modules stay isolated", () => {
   assert.throws(() => validatePlugins([...snapshotPlugins, snapshotPlugins[0]]), /duplicate/);
   assert.throws(() => measured(snapshotPlugins[0], { numerator: NaN, denominator: 1 }), /Invalid/);
+  assert.equal(measured(snapshotPlugins[0], { numerator: 1, denominator: 1, source: "must not survive" }).source, undefined);
   const m = measure([file("", "x")]);
   m.fileMetrics[0].alternativeMetrics.bytes.after.numerator = Infinity;
   assert.throws(() => addAlternativeMetrics(m), /Invalid saved/);
@@ -90,4 +91,13 @@ test("Plugin validation rejects bad evidence, and language-independent modules s
     const imports = [...readFileSync(new URL(name, directory), "utf8").matchAll(/from\s+["']([^"']+)["']/g)];
     for (const [, path] of imports) assert.match(path, /^\.\/[^/]+\.mjs$/);
   }
+});
+
+test("Reaggregation never mixes incompatible metric versions", () => {
+  const m = measure([file("x", "xx")]);
+  m.fileMetrics[0].alternativeMetrics.bytes.version = 0;
+  const upgraded = addAlternativeMetrics(m);
+  assert.equal(upgraded.alternativeMetrics.bytes.before.status, "missing-content");
+  assert.equal(upgraded.alternativeMetrics.bytes.after.value, null);
+  assert.match(upgraded.alternativeMetrics.bytes.after.reasons[0], /version differs/);
 });

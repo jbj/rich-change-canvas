@@ -102,7 +102,7 @@ function metricFile(path, before, after, additions = 1) {
       analyzeChangedLines({ before: physicalLines(before), after: physicalLines(after) }, path)) };
 }
 
-test("Metric selection drives absolute diffstats and retains neutral bars for snapshot metrics", () => {
+test("Metric selection drives absolute diffstats without bars and retains snapshot bars", () => {
   const report = createReport({
     source: { kind: "local", repository: "fixture" }, title: "Metrics",
     comparison: { mergeBaseSha: "base", headSha: "head" },
@@ -120,10 +120,10 @@ test("Metric selection drives absolute diffstats and retains neutral bars for sn
   assert.equal(categoryToggle(page, "source").textContent, "Source · 1");
   assert.equal(fileRow(page, "a.js").hidden, false);
   assert.equal(page["value-heading"].textContent, "+added / −removed");
-  assert.equal(page["line-scale"].textContent, "Log scale · max 2 lines");
-  const bars = categoryRow(page, "source").children[2].children[0].children;
-  assert.deepEqual(bars.map((rect) => rect.attributes.class), ["bar-track", "bar-added"]);
-  assert.deepEqual(bars.map((rect) => rect.attributes.width), ["100", "100"]);
+  assert.equal(categoryRow(page, "source").children.length, 3);
+  assert.equal(fileRow(page, "a.js").children.length, 3);
+  assert.equal(page["bar-heading"].hidden, true);
+  assert.equal(page["metric-legend"].hidden, true);
   page.metric.value = "bytes";
   page.metric.events.change();
   assert.match(page.totals.textContent, /4 → 11 B \(Δ \+7\)/);
@@ -132,6 +132,8 @@ test("Metric selection drives absolute diffstats and retains neutral bars for sn
   const snapshots = categoryRow(page, "source").children[2].children[0].children;
   assert.deepEqual(snapshots.map((rect) => rect.attributes.class), ["bar-before", "bar-after"]);
   assert.deepEqual(snapshots.map((rect) => rect.attributes.y), ["0", "5"]);
+  assert.equal(page["bar-heading"].hidden, false);
+  assert.equal(page["metric-legend"].hidden, false);
   page.metric.value = "repeated-lines";
   page.metric.events.change();
   assert.match(page.totals.textContent, /0 → 0 lines/);
@@ -171,7 +173,7 @@ test("Text churn exposes absolute added/removed counts, including zero-line rena
   assert.equal(categoryRow(empty, "documentation").children[1].textContent, "±0 lines");
 });
 
-test("Long-line diffstats render seven added and one removed with proportional colored bars", () => {
+test("Long-line diffstats render seven added and one removed without bars", () => {
   const before = "x".repeat(121), added = Array.from({ length: 7 }, (_, i) => `${i}${"y".repeat(120)}`);
   const report = createReport({
     source: { kind: "fixture", repository: "fixture" }, title: "Long lines",
@@ -183,8 +185,10 @@ test("Long-line diffstats render seven added and one removed with proportional c
   assert.match(page.totals.textContent, /\+7 \/ -1 lines/);
   assert.doesNotMatch(page.totals.textContent, /\+6|%/);
   assert.match(fileRow(page, "a.js").children[1].textContent, /\+7 \/ -1/);
-  const widths = categoryRow(page, "source").children[2].children[0].children.map((rect) => rect.attributes.width);
-  assert.deepEqual(widths, ["100", "87.5", "12.5"]);
+  assert.equal(categoryRow(page, "source").children.length, 3);
+  assert.equal(fileRow(page, "a.js").children.length, 3);
+  assert.equal(page["bar-heading"].hidden, true);
+  assert.equal(page["metric-legend"].hidden, true);
 });
 
 test("Diffstats omit zero sides and zero-only rows without losing expansion across metric filters", () => {
@@ -590,7 +594,7 @@ test("Single-report overview is visible immediately with details collapsed", () 
   assert.equal(fileRow(page, "asset.bin").children[0].children[0].children.some((child) => child.tag === "a"), false);
 });
 
-test("Role bars share a text-line scale with expandable file rows", () => {
+test("Role bars share a linear text-line scale with expandable file rows", () => {
   const report = createReport({
     source: { kind: "fixture", repository: "fixture" }, title: "Mixed scope",
     comparison: { mergeBaseSha: "base", headSha: "head" },
@@ -605,14 +609,14 @@ test("Role bars share a text-line scale with expandable file rows", () => {
   const source = categoryRow(page, "source");
   const tests = categoryRow(page, "test");
   const docs = categoryRow(page, "documentation");
-  assert.equal(source.children[2].children[0].attributes["aria-label"], "Source: +30 / -10 text lines; logarithmic scale 0–40");
+  assert.equal(source.children[2].children[0].attributes["aria-label"], "Source: +30 / -10 text lines; linear scale 0–40");
   assert.equal(source.children[3].className, "table-spacer");
   assert.equal(source.children[3].attributes["aria-hidden"], "true");
-  assert.equal(page["line-scale"].textContent, "Log scale · max 40 lines · binary: bytes");
+  assert.equal(page["line-scale"].textContent, "Linear scale · 0–40 lines · binary: bytes");
   assert.deepEqual(source.children[2].children[0].children.map((rect) => rect.attributes.width), ["100", "75", "25"]);
   const testBarWidths = tests.children[2].children[0].children.map((rect) => Number(rect.attributes.width));
   assert.equal(testBarWidths[0], 100);
-  assert.ok(Math.abs(testBarWidths[1] + testBarWidths[2] - Math.log1p(10) / Math.log1p(40) * 100) < 0.01);
+  assert.equal(testBarWidths[1] + testBarWidths[2], 25);
   assert.equal(docs.children[2].textContent, "");
   assert.equal(page["evidence-panel"], undefined);
   assert.equal(page["provenance-panel"], undefined);

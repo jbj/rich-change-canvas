@@ -95,6 +95,8 @@ file and role rows are hidden for the selected diffstat metric. Binary and
 rename/copy-only changes remain visible in the text-line/churn views with
 neutral **±0** instead of +0 / −0. Summaries also use ±0 for zero totals.
 Unavailable or partial measurements are never hidden as measured zeros.
+Files where a metric does not apply are omitted, along with empty role groups;
+an entirely inapplicable scope is labeled "Not applicable", not a signed N/A.
 Commit navigation stays available even when a commit has no text-line changes.
 
 Bytes, averages, maxima, and repeated lines retain whole-file before → after

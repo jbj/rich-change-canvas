@@ -243,6 +243,63 @@ test("Unknown and partially measured zeros stay visible rather than becoming no-
   assert.equal(page["role-empty"].hidden, true);
 });
 
+test("Inapplicable metric rows are omitted while missing measurements stay visible", () => {
+  const report = createReport({
+    source: { kind: "local", repository: "fixture" }, title: "Applicability",
+    comparison: {}, files: [
+      metricFile("README.md", "# Before\n", "# After\n"),
+      metricFile("module.js", "", "function example() {}\n"),
+      { path: "test/unknown.js", status: "modified", additions: 1, deletions: 1 },
+    ],
+  });
+  const page = reviewPage(report);
+  assert.ok(fileRow(page, "README.md"));
+  page.metric.value = "declaration-lines";
+  page.metric.events.change();
+  assert.equal(fileRow(page, "README.md"), undefined);
+  assert.equal(diffRow(page, "README.md"), undefined);
+  assert.equal(categoryRow(page, "documentation"), undefined);
+  assert.equal(fileRow(page, "module.js").children[1].textContent, "+1 lines");
+  assert.match(fileRow(page, "test/unknown.js").textContent, /Unavailable/);
+  assert.doesNotMatch(page["category-rows"].textContent, /N\/A/);
+  page.metric.value = "lines";
+  page.metric.events.change();
+  assert.ok(fileRow(page, "README.md"));
+
+  const docs = reviewPage(createReport({
+    source: report.source, title: "Docs only", comparison: {},
+    files: [metricFile("README.md", "# Before\n", "# After\n")],
+  }));
+  docs.metric.value = "declaration-lines";
+  docs.metric.events.change();
+  assert.equal(docs["category-rows"].children.length, 0);
+  assert.equal(docs["role-empty"].hidden, false);
+  assert.match(docs["role-empty"].textContent, /does not apply/);
+  assert.match(docs.totals.textContent, /Not applicable/);
+  assert.doesNotMatch(docs.totals.textContent, /N\/A|±0/);
+});
+
+test("Renames across supported languages show only applicable diffstat sides", () => {
+  for (const [beforePath, afterPath, before, after, expected] of [
+    ["README.md", "module.js", "# Docs\n", "function example() {}\n", "+1 lines"],
+    ["module.js", "README.md", "function example() {}\n", "# Docs\n", "-1 lines"],
+  ]) {
+    const file = {
+      path: afterPath, previousPath: beforePath, status: "renamed", additions: 1, deletions: 1,
+      alternativeMetrics: compareSnapshots(
+        analyzeSnapshot(Buffer.from(before), beforePath), analyzeSnapshot(Buffer.from(after), afterPath),
+        analyzeChangedLines({ before: physicalLines(before), after: physicalLines(after) }, beforePath, afterPath)),
+    };
+    const page = reviewPage(createReport({
+      source: { kind: "fixture", repository: "fixture" }, title: "Rename", comparison: {}, files: [file],
+    }));
+    page.metric.value = "declaration-lines";
+    page.metric.events.change();
+    assert.equal(fileRow(page, afterPath).children[1].textContent, expected);
+    assert.doesNotMatch(page.totals.textContent, /N\/A/);
+  }
+});
+
 test("Zero-text commit navigation retains rename evidence with neutral ±0", () => {
   const rename = { path: "new.js", previousPath: "old.js", status: "renamed", additions: 0, deletions: 0 };
   const report = createReport({

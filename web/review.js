@@ -127,12 +127,19 @@
     const number = (value) => value === null || value === undefined ? "N/A" : numeric(value);
     const evidence = (target) => target.alternativeMetrics?.[metric().id];
     const knownZero = (side) => side?.status === "available" && side.value === 0;
+    const inapplicable = (side) => side?.status === "unsupported" || side?.status === "not-applicable";
+    function inapplicableMetric(target) {
+      const result = evidence(target);
+      return (isDiffstat() ? [result?.changes?.additions, result?.changes?.deletions] :
+        [result?.before, result?.after]).every(inapplicable);
+    }
     const nonTextChange = (file) => file.binary || file.status === "renamed" || file.status === "copied";
     function omitFile(file) {
       if (isLines()) return !file.additions && !file.deletions && !nonTextChange(file);
+      if (inapplicableMetric(file)) return true;
       if (!isDiffstat()) return false;
       const changes = evidence(file)?.changes;
-      return knownZero(changes?.additions) && knownZero(changes?.deletions) &&
+      return [changes?.additions, changes?.deletions].every((side) => knownZero(side) || inapplicable(side)) &&
         !(metric().id === "churn" && nonTextChange(file));
     }
     function sideText(side) {
@@ -154,6 +161,10 @@
       const result = evidence(target);
       const node = el("span", undefined, "count");
       node.setAttribute("title", availability(result));
+      if (inapplicableMetric(target)) {
+        node.textContent = "Not applicable";
+        return node;
+      }
       if (isDiffstat()) {
         const changes = result?.changes;
         if (changes?.additions?.value === 0 && changes?.deletions?.value === 0) {
@@ -162,10 +173,11 @@
         } else {
           for (const [side, sign, className] of [["additions", "+", "added"], ["deletions", "-", "deleted"]]) {
             const entry = changes?.[side];
-            if (knownZero(entry)) continue;
+            if (knownZero(entry) || inapplicable(entry)) continue;
             if (node.childElementCount) node.append(document.createTextNode(" / "));
             node.append(el("span", `${sign}${sideText(entry)}`, className));
           }
+          if (!node.childElementCount) node.append(el("span", "±0", "zero"));
         }
         if (node.childElementCount) node.append(document.createTextNode(` ${metric().unit}`));
         if ((!result?.changes?.additions || !result?.changes?.deletions ||
@@ -183,6 +195,7 @@
     }
     function metricBar(target, maximum, label) {
       const result = evidence(target);
+      if (inapplicableMetric(target)) return document.createTextNode("");
       if (isDiffstat()) {
         return bar([[result?.changes?.additions?.value ?? 0, "bar-added"],
           [result?.changes?.deletions?.value ?? 0, "bar-deleted"]], maximum,
@@ -403,7 +416,8 @@
           diffRow ? [row, diffRow] : [row]));
       }
       $("role-empty").hidden = $("category-rows").childElementCount > 0;
-      $("role-empty").textContent = metrics.files ? "No changes for this metric." : "No files changed in this scope.";
+      $("role-empty").textContent = !metrics.files ? "No files changed in this scope." :
+        inapplicableMetric(metrics) ? "This metric does not apply to files in this scope." : "No changes for this metric.";
       originalCommits(report);
     }
     function selectScope(key) {

@@ -250,6 +250,8 @@ Run the analyzer, persistence, CLI, renderer, and corpus-replay tests:
 node --test test/*.test.mjs research/metrics.test.mjs
 ```
 
+GitHub Actions runs this suite on every push and pull request using Node.js 22.
+
 ### Retesting canvas changes
 
 There is no build or dependency-install step: the analyzer and dashboard run

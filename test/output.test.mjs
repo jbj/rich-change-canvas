@@ -1030,7 +1030,7 @@ test("Wrapping preserves exact patch text and synchronizes current and newly ope
   assert.deepEqual(page.fetchRequests, []);
 });
 
-test("Rows omit modified labels and zero binary totals without hiding exceptional statuses or binary evidence", () => {
+test("Rows omit all filename status labels and zero binary totals without hiding changed files", () => {
   const report = createReport({
     source: { kind: "fixture", repository: "fixture" }, title: "Less noise", comparison: {},
     files: [
@@ -1038,14 +1038,20 @@ test("Rows omit modified labels and zero binary totals without hiding exceptiona
       { path: "src/added.js", status: "added", additions: 1, deletions: 0 },
       { path: "src/old.js", status: "removed", additions: 0, deletions: 1 },
       { path: "src/renamed.js", previousPath: "src/before.js", status: "renamed", additions: 0, deletions: 0 },
+      { path: "src/copied.js", previousPath: "src/before.js", status: "copied", additions: 0, deletions: 0 },
     ],
   });
   const page = reviewPage(report);
   assert.doesNotMatch(page.totals.textContent, /binary files/);
   assert.equal(page.totals.children.length, 2);
-  assert.equal(descendant(fileRow(page, "src/modified.js"), (node) => node.className === "file-meta"), undefined);
-  for (const [path, status] of [["src/added.js", "added"], ["src/old.js", "removed"], ["src/renamed.js", "renamed"]]) {
-    assert.equal(descendant(fileRow(page, path), (node) => node.className === "file-meta").textContent, status);
+  categoryToggle(page, "source").events.click();
+  for (const { path, status } of report.metrics.fileMetrics) {
+    const row = fileRow(page, path);
+    const summary = descendant(row, (node) => node.tag === "summary");
+    assert.equal(row.hidden, false);
+    assert.equal(summary.textContent, path);
+    assert.equal(summary.children.length, 1);
+    assert.equal(summary.attributes["aria-label"], `${path} (${status})`);
   }
   assert.match(reviewPage(sample()).totals.textContent, /1binary files/);
 });

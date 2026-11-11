@@ -67,7 +67,7 @@ precedence over that minimum. Paths stay on one line when truncated;
 the complete path remains in the accessible label and hover title. Text diffs
 already include their filenames, so no additional filename heading is added.
 Files without a displayable text patch retain full current/previous paths in
-their expanded details. Ordinary "modified" labels and zero binary-file totals
+their expanded details. File-status labels beside filenames and zero binary-file totals
 are omitted. Text actions consistently underline on hover or keyboard focus,
 without a hover background.
 Diffs preserve formatting with local horizontal scrolling by default.

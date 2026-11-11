@@ -122,7 +122,6 @@ details[open] > .file-summary::before { content: "▾"; }
 .path-suffix { display: flex; justify-content: flex-end; order: 2; }
 .path-suffix > span { flex: none; }
 .file-name[data-truncated="true"]::after { content: "..."; flex: none; order: 1; }
-.file-meta { flex: none; color: var(--muted); font-size: 10px; white-space: nowrap; }
 .full-path { overflow-wrap: anywhere; user-select: text; }
 .diff-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
 .wrap-control { color: var(--text); cursor: pointer; }

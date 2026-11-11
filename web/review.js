@@ -358,7 +358,6 @@
       suffix.append(end);
       name.append(prefix, suffix);
       summary.append(name);
-      if (file.status !== "modified") summary.append(el("span", file.status, "file-meta"));
       details.append(summary);
       const diffRow = el("tr", undefined, "diff-row");
       diffRow.hidden = true;

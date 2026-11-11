@@ -45,7 +45,7 @@ must be accessible; acquisition errors remain explicit rather than producing
 incomplete success-shaped results.
 
 The **change review dashboard** puts scope controls, coloured line deltas,
-miniature role bars, and collapsible commits on one compact screen, without tabs.
+numeric role summaries, and collapsible commits on one compact screen, without tabs.
 Expand a role to see its file list in the same diffstat columns; expand a file
 to load its local diff on demand or open its GitHub diff when available. The
 live canvas displays local diffs up to 256 KiB; saved reports do not embed patch
@@ -53,7 +53,8 @@ text. Expand Original commits to select a commit and update the same overview;
 scope selectors keep that overview in place. Report comparison and search/shape
 filters are available in an expandable section when there are multiple reports
 or non-empty local layers.
-Diffstat bars use a logarithmic scale; binary sizes never enter line bars.
+Diffstats and commit summaries show numbers only, with no Churn column.
+Whole-file snapshot metrics retain before/after bars on a linear scale.
 Repository text uses sans serif typography, while fixed headings and counts are
 monospaced. The dashboard follows the system colour scheme and stacks in narrow
 panels.
@@ -82,11 +83,11 @@ study below has separate, stronger review-selection evidence.
 Use **Metric** next to Scope to switch the existing totals, role table, expanded
 file rows, and bars. Added/deleted text lines remain the default. Metric changes
 preserve expanded roles; report/scope changes preserve the metric selection.
-Original-commit mini-bars and Compare reports remain explicitly labeled
+Original-commit counts and Compare reports remain explicitly labeled
 text-line navigation summaries.
 
 Additive line/occurrence metrics show a **diffstat: +added / −removed**, with
-green/red bars on a shared logarithmic churn scale. These are counts of
+coloured numbers and no bars. These are counts of
 qualifying changed lines or occurrences, not net differences between whole-file
 totals. Replacing one long line with seven long lines shows **+7 / −1**, not
 +6. Replacing a long line with a different long line shows **+1 / −1**.

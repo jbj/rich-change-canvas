@@ -110,6 +110,10 @@ test("Metric selection drives absolute diffstats without bars and retains snapsh
   });
   const page = reviewPage(report);
   assert.equal(page.metric.value, "lines");
+  assert.equal(page["bar-heading"].hidden, true);
+  assert.equal(page["metric-legend"].hidden, true);
+  assert.equal(categoryRow(page, "source").children.length, 2);
+  assert.equal(fileRow(page, "a.js").children.length, 2);
   categoryToggle(page, "source").events.click();
   page.metric.value = "blank-lines";
   page.metric.events.change();
@@ -120,8 +124,8 @@ test("Metric selection drives absolute diffstats without bars and retains snapsh
   assert.equal(categoryToggle(page, "source").textContent, "Source · 1");
   assert.equal(fileRow(page, "a.js").hidden, false);
   assert.equal(page["value-heading"].textContent, "+added / −removed");
-  assert.equal(categoryRow(page, "source").children.length, 3);
-  assert.equal(fileRow(page, "a.js").children.length, 3);
+  assert.equal(categoryRow(page, "source").children.length, 2);
+  assert.equal(fileRow(page, "a.js").children.length, 2);
   assert.equal(page["bar-heading"].hidden, true);
   assert.equal(page["metric-legend"].hidden, true);
   page.metric.value = "bytes";
@@ -134,6 +138,11 @@ test("Metric selection drives absolute diffstats without bars and retains snapsh
   assert.deepEqual(snapshots.map((rect) => rect.attributes.y), ["0", "5"]);
   assert.equal(page["bar-heading"].hidden, false);
   assert.equal(page["metric-legend"].hidden, false);
+  assert.equal(page["bar-heading"].textContent, "Snapshots");
+  assert.equal(categoryRow(page, "source").children.length, 3);
+  assert.equal(fileRow(page, "a.js").children.length, 3);
+  assert.equal(diffRow(page, "a.js").children[0].colSpan, 3);
+  assert.deepEqual(snapshots.map((rect) => Number(rect.attributes.width)), [4 / 11 * 100, 100]);
   page.metric.value = "repeated-lines";
   page.metric.events.change();
   assert.match(page.totals.textContent, /0 → 0 lines/);
@@ -141,6 +150,9 @@ test("Metric selection drives absolute diffstats without bars and retains snapsh
   page.metric.value = "lines";
   page.metric.events.change();
   assert.match(categoryRow(page, "source").children[1].textContent, /\+2 \/ -2/);
+  assert.equal(page["bar-heading"].hidden, true);
+  assert.equal(categoryRow(page, "source").children.length, 2);
+  assert.equal(diffRow(page, "a.js").children[0].colSpan, 2);
 });
 
 test("Text churn exposes absolute added/removed counts, including zero-line renames", () => {
@@ -158,7 +170,11 @@ test("Text churn exposes absolute added/removed counts, including zero-line rena
   assert.equal(fileRow(page, "b.js").children[1].textContent, "+1 lines");
   assert.match(page.totals.textContent, /\+3 \/ -1 lines/);
   assert.doesNotMatch(page.totals.textContent, /Δ|→/);
-  assert.equal(page["bar-heading"].textContent, "Churn");
+  assert.equal(page["bar-heading"].textContent, "Snapshots");
+  assert.equal(page["bar-heading"].hidden, true);
+  assert.equal(page["metric-legend"].hidden, true);
+  assert.equal(fileRow(page, "a.js").children.length, 2);
+  assert.equal(categoryRow(page, "source").children.length, 2);
   assert.doesNotMatch(page.totals.textContent, /%|entropy|concentration/);
   const rename = createReport({
     source: { kind: "fixture", repository: "fixture" }, title: "Rename",
@@ -185,8 +201,8 @@ test("Long-line diffstats render seven added and one removed without bars", () =
   assert.match(page.totals.textContent, /\+7 \/ -1 lines/);
   assert.doesNotMatch(page.totals.textContent, /\+6|%/);
   assert.match(fileRow(page, "a.js").children[1].textContent, /\+7 \/ -1/);
-  assert.equal(categoryRow(page, "source").children.length, 3);
-  assert.equal(fileRow(page, "a.js").children.length, 3);
+  assert.equal(categoryRow(page, "source").children.length, 2);
+  assert.equal(fileRow(page, "a.js").children.length, 2);
   assert.equal(page["bar-heading"].hidden, true);
   assert.equal(page["metric-legend"].hidden, true);
 });
@@ -594,7 +610,7 @@ test("Single-report overview is visible immediately with details collapsed", () 
   assert.equal(fileRow(page, "asset.bin").children[0].children[0].children.some((child) => child.tag === "a"), false);
 });
 
-test("Role bars share a linear text-line scale with expandable file rows", () => {
+test("Text-line roles and files use balanced numeric columns without bars", () => {
   const report = createReport({
     source: { kind: "fixture", repository: "fixture" }, title: "Mixed scope",
     comparison: { mergeBaseSha: "base", headSha: "head" },
@@ -609,21 +625,20 @@ test("Role bars share a linear text-line scale with expandable file rows", () =>
   const source = categoryRow(page, "source");
   const tests = categoryRow(page, "test");
   const docs = categoryRow(page, "documentation");
-  assert.equal(source.children[2].children[0].attributes["aria-label"], "Source: +30 / -10 text lines; linear scale 0–40");
-  assert.equal(source.children[3].className, "table-spacer");
-  assert.equal(source.children[3].attributes["aria-hidden"], "true");
-  assert.equal(page["line-scale"].textContent, "Linear scale · 0–40 lines · binary: bytes");
-  assert.deepEqual(source.children[2].children[0].children.map((rect) => rect.attributes.width), ["100", "75", "25"]);
-  const testBarWidths = tests.children[2].children[0].children.map((rect) => Number(rect.attributes.width));
-  assert.equal(testBarWidths[0], 100);
-  assert.equal(testBarWidths[1] + testBarWidths[2], 25);
-  assert.equal(docs.children[2].textContent, "");
+  assert.equal(source.children[1].textContent, "+30 / -10");
+  assert.equal(tests.children[1].textContent, "+5 / -5");
+  assert.equal(docs.children[1].textContent, "±0");
+  assert.equal(source.children.length, 2);
+  assert.equal(tests.children.length, 2);
+  assert.equal(docs.children.length, 2);
+  assert.equal(page["bar-heading"].hidden, true);
+  assert.equal(page["metric-legend"].hidden, true);
   assert.equal(page["evidence-panel"], undefined);
   assert.equal(page["provenance-panel"], undefined);
   const testFile = fileRow(page, "test/main.test.js");
   const docFile = fileRow(page, "docs/new.md");
-  assert.equal(testFile.children[3].className, "table-spacer");
-  assert.equal(testFile.children[3].attributes["aria-hidden"], "true");
+  assert.equal(testFile.children.length, 2);
+  assert.equal(docFile.children.length, 2);
   assert.equal(testFile.hidden, true);
   assert.equal(categoryToggle(page, "test").attributes["aria-expanded"], "false");
   categoryToggle(page, "test").events.click();
@@ -651,7 +666,7 @@ test("Opening a local file lazily renders its selected-scope diff", async () => 
   const details = row.children[0].children[0];
   const outputRow = diffRow(page, "src/value.js"), outputCell = outputRow.children[0];
   assert.equal(outputRow.hidden, true);
-  assert.equal(outputCell.colSpan, 4);
+  assert.equal(outputCell.colSpan, 2);
   details.open = true;
   details.events.toggle();
   await new Promise((resolve) => setImmediate(resolve));
@@ -797,8 +812,30 @@ test("Corpus CLI creates an offline gallery reusable by view, with navigable rea
   assert.deepEqual(embedded, reports);
   for (const report of reports) assert.deepEqual(await loadReport(output, report.id), report);
   run("node", [cli, "view", "--input", join(output, `${reports[0].id}.json`), "--out", join(output, "reopened")]);
-  const page = reviewPage(...embedded);
+  const page = reviewHtml(html);
+  assert.doesNotMatch(html, /table-spacer|<th[^>]*>Churn<\/th>/);
+  const style = html.match(/<style[^>]*>([\s\S]*?)<\/style>/)[1];
+  assert.match(style, /\.footprint-table\s*\{[^}]*table-layout:\s*fixed/);
+  assert.match(style, /\.footprint-table th:nth-child\(1\),\s*\.footprint-table td:nth-child\(1\)\s*\{\s*width:\s*45%/);
   assert.equal(page["report-rows"].children.length, 30);
+  const descendants = (node) => [node, ...node.children.flatMap(descendants)];
+  function assertNumericColumns() {
+    assert.equal(page["bar-heading"].hidden, true);
+    assert.equal(page["metric-legend"].hidden, true);
+    for (const row of page["category-rows"].children) assert.equal(row.children.length, 2);
+    assert.equal(descendants(page["category-rows"]).some((node) => node.tag === "svg"), false);
+    assert.equal(descendants(page["commit-list"]).some((node) => node.tag === "svg"), false);
+  }
+  for (const [index, report] of reports.entries()) {
+    page.report.value = String(index);
+    page.report.events.change();
+    assertNumericColumns();
+    for (const [commitIndex] of report.commits.entries()) {
+      page.scope.value = `commit:${commitIndex}`;
+      page.scope.events.change();
+      assertNumericColumns();
+    }
+  }
   for (const repository of ["spf13/cobra", "microsoft/TypeScript", "nodejs/node", "elastic/elasticsearch"]) {
     const index = reports.findIndex((report) => report.source.repository === repository);
     page.report.value = String(index);

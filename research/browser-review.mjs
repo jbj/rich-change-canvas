@@ -14,6 +14,11 @@ export async function auditReview(frame, widths = [480, 640, 800, 1024, 1280]) {
     get(id).dispatchEvent(new win.Event("change"));
   };
   const paint = () => new Promise((resolve) => win.requestAnimationFrame(resolve));
+  const settle = async () => {
+    await paint();
+    await paint();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  };
   const fail = (context, problem) => result.failures.push({ ...context, problem });
   const check = (context) => {
     const error = get("error");
@@ -24,6 +29,29 @@ export async function auditReview(frame, widths = [480, 640, 800, 1024, 1280]) {
       if (cell.scrollWidth > cell.clientWidth + 1) {
         fail(context, `Metric cell overflows: ${cell.textContent}`);
         break;
+      }
+    }
+    for (const row of doc.querySelectorAll(".file-row:not([hidden])")) {
+      const name = row.querySelector(".file-name"), value = row.cells[1].querySelector(".count");
+      if (!name || !value) continue;
+      const parts = [...name.children];
+      const pathWidth = parts.reduce((sum, part) => sum + part.firstElementChild.getBoundingClientRect().width, 0);
+      const clipped = pathWidth > name.clientWidth + 0.5;
+      if (clipped && win.getComputedStyle(name, "::after").content !== '"..."') {
+        fail(context, `Truncated path has no middle ellipsis: ${row.dataset.filePath}`);
+      }
+      const suffix = name.querySelector(".path-suffix");
+      if (suffix?.firstElementChild.getBoundingClientRect().right > suffix.getBoundingClientRect().right + 1.5) {
+        fail(context, `Path suffix is clipped at its right end: ${row.dataset.filePath}`);
+      }
+      const range = doc.createRange();
+      range.selectNodeContents(value);
+      const bounds = range.getBoundingClientRect(), style = win.getComputedStyle(row.cells[1]);
+      const valueSlack = row.cells[1].clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - bounds.width;
+      if (clipped && valueSlack > 12) fail(context, `Truncated path has ${Math.round(valueSlack)}px unused in its metric cell`);
+      const nameSlack = name.clientWidth - parts.reduce((sum, part) => sum + part.getBoundingClientRect().width, 0);
+      if (bounds.height > parseFloat(win.getComputedStyle(value).lineHeight) + 2 && !clipped && nameSlack > 12) {
+        fail(context, `Wrapped metric has ${Math.round(nameSlack)}px unused beside its path`);
       }
     }
   };
@@ -57,6 +85,7 @@ export async function auditReview(frame, widths = [480, 640, 800, 1024, 1280]) {
       const context = { width, report: index, repository: report.source.repository };
       for (const option of [...get("scope").options]) {
         select("scope", option.value);
+        await settle();
         result.scopeChecks++;
         check({ ...context, scope: option.value });
       }
@@ -65,12 +94,13 @@ export async function auditReview(frame, widths = [480, 640, 800, 1024, 1280]) {
       for (const row of doc.querySelectorAll(".file-row")) {
         const path = row.dataset.filePath;
         if (!row.querySelector("summary").getAttribute("aria-label")?.includes(path) ||
-            row.nextElementSibling?.querySelector(".full-path")?.textContent !== path) {
+            row.querySelector(".file-name")?.textContent !== path) {
           fail(context, `Full path unavailable: ${path}`);
         }
       }
       for (const option of [...get("metric").options]) {
         select("metric", option.value);
+        await settle();
         result.metricChecks++;
         check({ ...context, metric: option.value });
       }
@@ -98,8 +128,9 @@ export async function auditReview(frame, widths = [480, 640, 800, 1024, 1280]) {
         continue;
       }
       await waitForDiff(output);
-      if (detailRow.hidden || detailRow.querySelector(".full-path").textContent !== candidate.file.path) {
-        fail(context, "Expanded full path is not visible");
+      if (detailRow.hidden) fail(context, "Expanded diff is not visible");
+      if (detailRow.querySelector(".full-path")) {
+        fail(context, "Text diff repeats its file path above or below the patch");
       }
       const checkbox = detailRow.querySelector(".wrap-control input");
       if (!checkbox) {
@@ -109,7 +140,7 @@ export async function auditReview(frame, widths = [480, 640, 800, 1024, 1280]) {
       for (const wrapped of [false, true]) {
         checkbox.checked = wrapped;
         checkbox.dispatchEvent(new win.Event("change"));
-        await paint();
+        await settle();
         result.diffChecks++;
         const detailContext = { ...context, path: candidate.file.path, wrapped };
         check(detailContext);

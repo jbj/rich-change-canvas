@@ -57,10 +57,15 @@ incomplete success-shaped results.
 The **change review dashboard** puts scope controls, coloured line deltas,
 numeric role summaries, and collapsible commits on one compact screen, without tabs.
 Expand a role to see its file list in the same diffstat columns; expand a file
-to display its complete, copyable path and diff inline, with a GitHub link when
-available. File rows prioritize the basename and shorten directory prefixes;
-expanded rows also show the previous path for renames. Long basenames occupy
-at most two lines in the compact row, without shortening the expanded path.
+to display its diff inline, with a GitHub link when available. Each row gives
+paths the space left by its actual counts, rather than reserving a fixed-width
+numeric column. Paths stay on one line and truncate in the middle when needed;
+the complete path remains in the accessible label and hover title. Text diffs
+already include their filenames, so no additional filename heading is added.
+Files without a displayable text patch retain full current/previous paths in
+their expanded details. Ordinary "modified" labels and zero binary-file totals
+are omitted. Text actions consistently underline on hover or keyboard focus,
+without a hover background.
 Diffs preserve formatting with local horizontal scrolling by default.
 **Wrap lines** wraps long code and unbroken tokens without changing patch text;
 the choice applies to other open and newly opened diffs for that page session.
@@ -330,6 +335,8 @@ checks every report, scope, and metric, then opens each report's longest-line
 diff in both wrapping modes. It checks rendering errors, page/metric overflow,
 full-path access, diff containment, and exact patch text. Copy the resulting
 JSON outside the repository; use browser screenshot tools for visual checks.
+The audit also checks for unused row space beside truncated paths or wrapped
+metrics, and redundant filename headings above text diffs.
 The helper serves only the specified HTML and its inspection page on loopback,
 does not modify the report or its CSP, and needs no package installation.
 Stop it with Ctrl-C when finished. Layout checks complement, rather than

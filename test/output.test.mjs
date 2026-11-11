@@ -34,6 +34,7 @@ function reviewPage(...reports) {
 
 function reviewHtml(html) {
   const fetchRequests = [];
+  const resizeObservers = [];
   class Element {
     children = [];
     value = "";
@@ -42,10 +43,14 @@ function reviewHtml(html) {
     dataset = {};
     events = {};
     attributes = {};
+    style = { setProperty(name, value) { this[name] = value; } };
+    bounds = { width: 0 };
     constructor(tag, text = "") { this.tag = tag; this.text = text; }
     get textContent() { return this.text + this.children.map((child) => child.textContent).join(""); }
     set textContent(value) { this.text = value; this.children = []; }
     get childElementCount() { return this.children.length; }
+    get firstElementChild() { return this.children[0]; }
+    getBoundingClientRect() { return this.bounds; }
     append(...children) { this.children.push(...children); }
     replaceChildren(...children) { this.text = ""; this.children = children; }
     addEventListener(name, handler) { this.events[name] = handler; }
@@ -64,15 +69,29 @@ function reviewHtml(html) {
     createElement: (tag) => new Element(tag),
     createElementNS: (namespace, tag) => new Element(tag),
     createTextNode: (text) => new Element("#text", text),
+    createRange: () => ({
+      selectNodeContents(node) { this.node = node; },
+      getBoundingClientRect() { return this.node.getBoundingClientRect(); },
+    }),
   };
   const fetch = async (url) => {
     fetchRequests.push(url);
     return { ok: true, status: 200, json: async () => ({ diff: "@@ -1 +1 @@\n-value = 1\n+value = 2\n" }) };
   };
   const script = html.match(/<script nonce="[^"]+">([\s\S]*?)<\/script>/)[1];
-  runInNewContext(script, { document, URL, fetch, encodeURIComponent });
+  class ResizeObserver {
+    observed = new Set();
+    constructor(callback) { this.callback = callback; resizeObservers.push(this); }
+    observe(node) { this.observed.add(node); }
+    disconnect() { this.observed.clear(); }
+  }
+  runInNewContext(script, {
+    document, URL, fetch, encodeURIComponent, ResizeObserver, requestAnimationFrame: (callback) => callback(),
+    getComputedStyle: () => ({ paddingLeft: "8px", paddingRight: "8px", lineHeight: "18px" }),
+  });
   assert.equal(nodes.error.textContent, "");
   nodes.fetchRequests = fetchRequests;
+  nodes.resizeObservers = resizeObservers;
   return nodes;
 }
 
@@ -822,8 +841,6 @@ test("Retained corpus reports remain viewable offline with navigable real PR sco
   run("node", [cli, "view", "--input", join(output, `${reports[0].id}.json`), "--out", join(output, "reopened")]);
   const page = reviewHtml(html);
   assert.doesNotMatch(html, /table-spacer|<th[^>]*>Churn<\/th>/);
-  const style = html.match(/<style[^>]*>([\s\S]*?)<\/style>/)[1];
-  assert.match(style, /\.footprint-table\s*\{[^}]*table-layout:\s*fixed/);
   assert.equal(page["report-rows"].children.length, 30);
   const descendants = (node) => [node, ...node.children.flatMap(descendants)];
   function assertNumericColumns() {
@@ -924,8 +941,11 @@ test("Compact filenames retain full accessible and expanded paths without requir
   categoryToggle(page, "source").events.click();
   const details = fileRow(page, path).children[0].children[0], summary = details.children[0];
   assert.equal(summary.attributes["aria-label"], `${path} (renamed)`);
-  assert.equal(descendant(summary, (node) => node.className === "file-directory").textContent, "directory/".repeat(40));
-  assert.equal(descendant(summary, (node) => node.className === "file-basename").textContent, `${"basename".repeat(40)}<unsafe>.js`);
+  const name = descendant(summary, (node) => node.className === "file-name");
+  assert.equal(name.textContent, path);
+  assert.equal(name.children[0].className, "path-prefix");
+  assert.equal(name.children[1].className, "path-suffix");
+  assert.equal(name.children[1].children[0].attributes.dir, "ltr");
   assert.equal(diffRow(page, path).hidden, true);
   details.open = true;
   details.events.toggle();
@@ -966,6 +986,7 @@ test("Wrapping preserves exact patch text and synchronizes current and newly ope
     const input = descendant(diffRow(page, path), (node) => node.tag === "input");
     assert.equal(output.attributes["aria-busy"], "false");
     assert.equal(output.attributes.tabindex, "0");
+    assert.equal(descendant(diffRow(page, path), (node) => node.className === "full-path"), undefined);
     return { output, input };
   };
   const a = await open("first.js"), b = await open("second.js");
@@ -987,4 +1008,71 @@ test("Wrapping preserves exact patch text and synchronizes current and newly ope
     assert.equal(next.output.textContent, patch);
   }
   assert.deepEqual(page.fetchRequests, []);
+});
+
+test("Rows omit modified labels and zero binary totals without hiding exceptional statuses or binary evidence", () => {
+  const report = createReport({
+    source: { kind: "fixture", repository: "fixture" }, title: "Less noise", comparison: {},
+    files: [
+      { path: "src/modified.js", status: "modified", additions: 2, deletions: 1 },
+      { path: "src/added.js", status: "added", additions: 1, deletions: 0 },
+      { path: "src/old.js", status: "removed", additions: 0, deletions: 1 },
+      { path: "src/renamed.js", previousPath: "src/before.js", status: "renamed", additions: 0, deletions: 0 },
+    ],
+  });
+  const page = reviewPage(report);
+  assert.doesNotMatch(page.totals.textContent, /binary files/);
+  assert.equal(page.totals.children.length, 2);
+  assert.equal(descendant(fileRow(page, "src/modified.js"), (node) => node.className === "file-meta"), undefined);
+  for (const [path, status] of [["src/added.js", "added"], ["src/old.js", "removed"], ["src/renamed.js", "renamed"]]) {
+    assert.equal(descendant(fileRow(page, path), (node) => node.className === "file-meta").textContent, status);
+  }
+  assert.match(reviewPage(sample()).totals.textContent, /1binary files/);
+});
+
+test("Middle path truncation preserves combining characters and joined emoji", () => {
+  const paths = ["ab\u0301", "a👩🏽‍💻"];
+  const page = reviewPage(createReport({
+    source: { kind: "fixture", repository: "fixture" }, title: "Unicode paths", comparison: {},
+    files: paths.map((path) => ({ path, status: "modified", additions: 1, deletions: 1 })),
+  }));
+  for (const path of paths) {
+    const name = descendant(fileRow(page, path), (node) => node.className === "file-name");
+    assert.equal(name.children[0].textContent, "a");
+    assert.equal(name.children[1].textContent, path.slice(1));
+  }
+});
+
+test("Rows fit wrapped metrics and middle-truncate paths without changing their text", () => {
+  const path = "directory/subdirectory/long-filename.js";
+  const page = reviewPage(createReport({
+    source: { kind: "fixture", repository: "fixture" }, title: "Resize paths", comparison: {},
+    files: [{ path, status: "modified", additions: 1, deletions: 1 }],
+  }));
+  const name = descendant(fileRow(page, path), (node) => node.className === "file-name");
+  const observer = page.resizeObservers[0];
+  assert.ok(observer.observed.has(name));
+  const metricCell = fileRow(page, path).children[1];
+  metricCell.firstElementChild.bounds.width = 123.4;
+  for (const part of name.children) part.firstElementChild.getBoundingClientRect = () => ({ width: 100 });
+  for (const [width, truncated] of [[150, "true"], [201, "false"], [199, "true"], [400, "false"]]) {
+    name.clientWidth = width;
+    observer.callback([{ target: name }]);
+    assert.equal(name.dataset.truncated, truncated);
+    assert.equal(name.style["--path-width"], "200px");
+    assert.equal(metricCell.style.width, "140px");
+    assert.equal(name.textContent, path);
+  }
+  metricCell.firstElementChild.bounds.height = 40;
+  name.clientWidth = 260;
+  observer.callback([{ target: name }]);
+  assert.equal(metricCell.style.width, "200px");
+  const category = categoryRow(page, "source");
+  category.children[0].clientWidth = 140;
+  category.children[0].firstElementChild.bounds.width = 60;
+  category.children[1].firstElementChild.bounds = { width: 100, height: 40 };
+  observer.callback([{ target: category }]);
+  assert.equal(category.children[1].style.width, "180px");
+  page.scope.events.change();
+  assert.equal(observer.observed.has(name), false);
 });

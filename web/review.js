@@ -5,6 +5,8 @@
     const node = document.createElement(tag);
     if (text !== undefined) node.textContent = text;
     if (className) node.className = className;
+    const role = { tr: "row", td: "cell", th: "columnheader" }[tag];
+    if (role) node.setAttribute("role", role);
     return node;
   };
   let wrapLines = false;
@@ -60,6 +62,10 @@
       node.append(el("span", line, className));
     }
   }
+  function filePaths(node, file) {
+    node.append(el("p", file.path, "full-path"));
+    if (file.previousPath) node.append(el("p", `Previous path: ${file.previousPath}`, "full-path muted"));
+  }
   function loadLocalDiff(details, file, scopeKey, diffCell, diffRow, tools, isCategoryExpanded) {
     let loaded = false;
     details.addEventListener("toggle", () => {
@@ -81,6 +87,7 @@
         }))
         .then((result) => {
           if (output.isConnected === false) return;
+          if (result.tooLarge || result.binary || !result.diff) filePaths(diffCell, file);
           if (result.tooLarge) output.textContent = "Diff is too large to display here.";
           else if (result.binary) output.textContent = "Binary file; no text diff.";
           else if (!result.diff) output.textContent = "No textual changes in this scope.";
@@ -103,13 +110,52 @@
             });
           }
         })
-        .catch((error) => { output.textContent = `Unable to load diff: ${error.message}`; })
+        .catch((error) => {
+          output.textContent = `Unable to load diff: ${error.message}`;
+          filePaths(diffCell, file);
+        })
         .finally(() => output.setAttribute("aria-busy", "false"));
     });
   }
   try {
     const reports = JSON.parse($("report-data").textContent);
     if (!Array.isArray(reports) || !reports.length) throw new Error("No reports were provided");
+    const pathSegments = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+    const rowViews = new WeakMap();
+    const rowObserver = new ResizeObserver((entries) => {
+      requestAnimationFrame(() => {
+        const views = [...new Set(entries.filter(({ target }) => target.isConnected !== false)
+          .map(({ target }) => rowViews.get(target)))];
+        const layouts = views.map((view) => ({
+          ...view, pathWidth: view.name ? [...view.name.children].reduce((sum, part) =>
+            sum + part.firstElementChild.getBoundingClientRect().width, 0) : 0,
+        }));
+        for (const { metricCell, name, pathWidth } of layouts) {
+          metricCell.style.width = "";
+          if (name) name.style.setProperty("--path-width", `${pathWidth}px`);
+        }
+        // Fit wrapped counts to their text, then return space their label cannot use.
+        const sizes = layouts.map((layout) => {
+          const { metricCell } = layout;
+          const range = document.createRange();
+          range.selectNodeContents(metricCell.firstElementChild);
+          const bounds = range.getBoundingClientRect(), style = getComputedStyle(metricCell);
+          return { ...layout, wrapped: bounds.height > parseFloat(style.lineHeight) + 2,
+            width: Math.ceil(bounds.width + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)) };
+        });
+        for (const { metricCell, width } of sizes) metricCell.style.width = `${width}px`;
+        const growth = sizes.filter(({ wrapped }) => wrapped).map(({ name, pathWidth, label, labelCell, metricCell, width }) => {
+          const style = labelCell && getComputedStyle(labelCell);
+          const spare = name ? name.clientWidth - pathWidth : labelCell.clientWidth -
+            parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - label.getBoundingClientRect().width;
+          return { metricCell, width: width + Math.max(0, Math.floor(spare)) };
+        });
+        for (const { metricCell, width } of growth) metricCell.style.width = `${width}px`;
+        const states = layouts.filter(({ name }) => name).map(({ name, pathWidth }) =>
+          ({ name, truncated: String(pathWidth > name.clientWidth + 0.5) }));
+        for (const { name, truncated } of states) name.dataset.truncated = truncated;
+      });
+    });
     const definitions = new Map([["lines", { id: "lines", label: "Added / deleted text lines",
       tier: "Language-independent", unit: "lines", mode: "churn",
       description: "Added/deleted physical text lines, including blanks and comments. Binary bytes are separate." }]]);
@@ -254,6 +300,7 @@
         [metricValue(metrics), isLines() ? "text lines" : metric().label, ""],
         [summary, summaryLabel, "muted"],
       ]) {
+        if (title === "binary files" && metrics.binaryFiles === 0) continue;
         const stat = el("div", undefined, "stat");
         const valueNode = el("span", undefined, `num ${className}${title === "measurement coverage" ? " coverage" : ""}`);
         if (typeof value === "string") valueNode.textContent = value;
@@ -272,18 +319,23 @@
       summary.setAttribute("aria-label", `${file.path} (${file.status})`);
       summary.title = file.path;
       const name = el("code", undefined, "file-name");
-      const slash = file.path.lastIndexOf("/");
-      if (slash >= 0) name.append(el("span", file.path.slice(0, slash + 1), "file-directory"));
-      name.append(el("span", file.path.slice(slash + 1), "file-basename"));
-      summary.append(name, el("span", file.status, "file-meta"));
+      const characters = Array.from(pathSegments.segment(file.path), ({ segment }) => segment);
+      const middle = Math.ceil(characters.length / 2);
+      const prefix = el("span", undefined, "path-prefix");
+      prefix.append(el("span", characters.slice(0, middle).join("")));
+      const suffix = el("span", undefined, "path-suffix");
+      const end = el("span", characters.slice(middle).join(""));
+      end.setAttribute("dir", "ltr");
+      suffix.append(end);
+      name.append(prefix, suffix);
+      summary.append(name);
+      if (file.status !== "modified") summary.append(el("span", file.status, "file-meta"));
       details.append(summary);
       const diffRow = el("tr", undefined, "diff-row");
       diffRow.hidden = true;
       diffRow.dataset.filePath = file.path;
       const diffCell = el("td");
       diffCell.colSpan = showsBars() ? 3 : 2;
-      diffCell.append(el("p", file.path, "full-path"));
-      if (file.previousPath) diffCell.append(el("p", `Previous path: ${file.previousPath}`, "full-path muted"));
       const tools = el("div", undefined, "diff-tools");
       diffCell.append(tools);
       diffRow.append(diffCell);
@@ -296,6 +348,7 @@
       }
       const localScope = selected().source.kind === "local" ? diffScope : null;
       if (!file.diff && !localScope) {
+        filePaths(diffCell, file);
         diffCell.append(el("p", file.binary ? "Binary file; no text diff." : "Diff not included in this report.", "muted"));
       }
       loadLocalDiff(details, file, localScope, diffCell, diffRow, tools, isCategoryExpanded);
@@ -312,6 +365,11 @@
         metricCell.append(delta(file));
       }
       row.append(pathCell, metricCell, ...(barCell ? [barCell] : []));
+      const view = { name, metricCell };
+      rowViews.set(name, view);
+      rowViews.set(row, view);
+      rowObserver.observe(name);
+      rowObserver.observe(row);
       return { row, diffRow, details };
     }
     function originalCommits(report) {
@@ -336,6 +394,7 @@
     const expandedRoles = new Set();
     function render(preserveRoles = false) {
       diffViews.clear();
+      rowObserver.disconnect();
       if (preserveRoles !== true) expandedRoles.clear();
       const report = selected(), current = scope(), metrics = current.metrics;
       $("overview").dataset.metricMode = metric().mode;
@@ -390,6 +449,8 @@
           metricCell.append(delta(metric));
         }
         categoryRow.append(nameCell, metricCell, ...(barCell ? [barCell] : []));
+        rowViews.set(categoryRow, { metricCell, label: toggle, labelCell: nameCell });
+        rowObserver.observe(categoryRow);
         const fileRows = files
           .map(({ file, fileIndex }) => {
             const diffScope = current.fileScopes?.[fileIndex] ?? current.key;

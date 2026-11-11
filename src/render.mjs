@@ -2,11 +2,13 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { measure } from "./metrics.mjs";
 import { addAlternativeMetrics, metricCatalog } from "./metric-analysis.mjs";
+import { fitTableColumns } from "./table-layout.mjs";
 
 // Keep browser assets paired with the loaded renderer until the process reloads.
 const template = readFileSync(new URL("../web/review.html", import.meta.url), "utf8");
 const style = readFileSync(new URL("../web/review.css", import.meta.url), "utf8");
-const script = readFileSync(new URL("../web/review.js", import.meta.url), "utf8");
+const script = readFileSync(new URL("../web/review.js", import.meta.url), "utf8")
+  .replace("__FIT_TABLE_COLUMNS__", fitTableColumns.toString());
 
 export function renderReports(reports) {
   if (!Array.isArray(reports) || reports.length === 0) throw new Error("At least one report is required");

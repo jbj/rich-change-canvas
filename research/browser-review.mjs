@@ -4,6 +4,69 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+export function inspectTableLayout(table) {
+  const win = table.ownerDocument.defaultView;
+  const rows = [...table.querySelectorAll("thead tr, .category-row, .file-row:not([hidden])")];
+  const widths = [...rows[0].cells].map((cell) => cell.hidden ? 0 : cell.getBoundingClientRect().width);
+  const available = table.clientWidth, preferred = [0, 0, 0], minimum = [0, 0, 0], probes = [], problems = [];
+  const segments = new win.Intl.Segmenter(undefined, { granularity: "grapheme" });
+  try {
+    for (const row of rows) for (const [index, cell] of [...row.cells].entries()) {
+      if (cell.hidden) continue;
+      if (Math.abs(cell.getBoundingClientRect().width - widths[index]) > 1.5) problems.push(`Column ${index} is not shared across rows`);
+      const probe = cell.cloneNode(true);
+      probe.removeAttribute("id");
+      probe.className = `${cell.className} column-probe`;
+      probe.setAttribute("aria-hidden", "true");
+      probe.inert = true;
+      row.append(probe);
+      probes.push({ index, probe });
+    }
+    for (const { index, probe } of probes) preferred[index] = Math.max(preferred[index], Math.ceil(probe.getBoundingClientRect().width));
+    for (const { index, probe } of probes) {
+      if (index === 0) {
+        const label = probe.querySelector(".file-name") ?? probe.querySelector("button") ?? probe;
+        const text = Array.from(segments.segment(label.textContent), ({ segment }) => segment);
+        if (text.length > 10) label.textContent = label.matches(".file-name") ?
+          `${text.slice(0, 5).join("")}...${text.slice(-5).join("")}` : text.slice(0, 10).join("");
+      } else if (index === 1) {
+        (probe.querySelector(".count") ?? probe).textContent = "0";
+      }
+    }
+    for (const { index, probe } of probes) minimum[index] = Math.max(minimum[index], Math.ceil(probe.getBoundingClientRect().width));
+  } finally {
+    for (const { probe } of probes) probe.remove();
+  }
+  const natural = preferred.reduce((sum, width) => sum + width, 0);
+  const trailing = available - widths.reduce((sum, width) => sum + width, 0);
+  if (natural <= available) {
+    if (widths.some((width, index) => Math.abs(width - preferred[index]) > 1.5)) {
+      problems.push("Fitting columns are not packed at their intrinsic widths");
+    }
+  } else {
+    if (Math.abs(trailing) > 1.5) problems.push(`Compressed columns leave ${Math.round(trailing)}px on the right`);
+    if (widths.slice(1).some((width, index) => width < preferred[index + 1] - 1.5) && widths[0] > minimum[0] + 1.5) {
+      problems.push("Stats shrink before the filename column reaches its minimum");
+    }
+    if (minimum.reduce((sum, width) => sum + width, 0) <= available &&
+        widths.some((width, index) => width < minimum[index] - 1.5)) {
+      problems.push("A column is smaller than its minimum although the minimums fit");
+    }
+  }
+  for (const row of rows) for (const cell of [...row.cells].slice(1)) {
+    if (cell.hidden) continue;
+    const value = cell.querySelector(".count") ?? cell.querySelector("svg");
+    if (!value) continue;
+    const range = table.ownerDocument.createRange();
+    range.selectNodeContents(value);
+    const right = value.tagName.toLowerCase() === "svg" ? value.getBoundingClientRect().right : range.getBoundingClientRect().right;
+    if (Math.abs(right - cell.getBoundingClientRect().right + parseFloat(win.getComputedStyle(cell).paddingRight)) > 1.5) {
+      problems.push("Stats content is not right-aligned");
+    }
+  }
+  return { available, preferred, minimum, widths, trailing, problems: [...new Set(problems)] };
+}
+
 export async function auditReview(frame, widths = [480, 640, 800, 1024, 1280]) {
   const win = frame.contentWindow, doc = frame.contentDocument;
   const get = (id) => doc.getElementById(id);
@@ -15,9 +78,17 @@ export async function auditReview(frame, widths = [480, 640, 800, 1024, 1280]) {
   };
   const paint = () => new Promise((resolve) => win.requestAnimationFrame(resolve));
   const settle = async () => {
-    await paint();
-    await paint();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    let previous, stableFrames = 0;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      await paint();
+      const table = get("footprint-table");
+      const current = [doc.documentElement.clientWidth, doc.documentElement.scrollHeight,
+        table.clientWidth, table.getAttribute("style")].join("|");
+      stableFrames = current === previous ? stableFrames + 1 : 0;
+      if (stableFrames === 2) return;
+      previous = current;
+    }
+    throw new Error("Table layout did not settle after resizing");
   };
   const fail = (context, problem) => result.failures.push({ ...context, problem });
   const check = (context) => {
@@ -25,6 +96,7 @@ export async function auditReview(frame, widths = [480, 640, 800, 1024, 1280]) {
     if (error.textContent || !error.hidden) fail(context, `Render error: ${error.textContent}`);
     const overflow = doc.documentElement.scrollWidth - doc.documentElement.clientWidth;
     if (overflow > 1) fail(context, `Document overflows by ${overflow}px`);
+    for (const problem of inspectTableLayout(get("footprint-table")).problems) fail(context, problem);
     for (const cell of doc.querySelectorAll(".category-row td:nth-child(2), .file-row:not([hidden]) td:nth-child(2)")) {
       if (cell.scrollWidth > cell.clientWidth + 1) {
         fail(context, `Metric cell overflows: ${cell.textContent}`);
@@ -43,15 +115,6 @@ export async function auditReview(frame, widths = [480, 640, 800, 1024, 1280]) {
       const suffix = name.querySelector(".path-suffix");
       if (suffix?.firstElementChild.getBoundingClientRect().right > suffix.getBoundingClientRect().right + 1.5) {
         fail(context, `Path suffix is clipped at its right end: ${row.dataset.filePath}`);
-      }
-      const range = doc.createRange();
-      range.selectNodeContents(value);
-      const bounds = range.getBoundingClientRect(), style = win.getComputedStyle(row.cells[1]);
-      const valueSlack = row.cells[1].clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - bounds.width;
-      if (clipped && valueSlack > 12) fail(context, `Truncated path has ${Math.round(valueSlack)}px unused in its metric cell`);
-      const nameSlack = name.clientWidth - parts.reduce((sum, part) => sum + part.getBoundingClientRect().width, 0);
-      if (bounds.height > parseFloat(win.getComputedStyle(value).lineHeight) + 2 && !clipped && nameSlack > 12) {
-        fail(context, `Wrapped metric has ${Math.round(nameSlack)}px unused beside its path`);
       }
     }
   };
@@ -90,6 +153,8 @@ export async function auditReview(frame, widths = [480, 640, 800, 1024, 1280]) {
         check({ ...context, scope: option.value });
       }
       select("scope", "whole");
+      await settle();
+      const collapsed = inspectTableLayout(get("footprint-table")).widths;
       for (const button of doc.querySelectorAll(".role-name")) button.click();
       for (const row of doc.querySelectorAll(".file-row")) {
         const path = row.dataset.filePath;
@@ -105,6 +170,13 @@ export async function auditReview(frame, widths = [480, 640, 800, 1024, 1280]) {
         check({ ...context, metric: option.value });
       }
       select("metric", "lines");
+      for (const button of doc.querySelectorAll('.role-name[aria-expanded="true"]')) button.click();
+      await settle();
+      check({ ...context, visibility: "collapsed" });
+      if (inspectTableLayout(get("footprint-table")).widths.some((width, index) => Math.abs(width - collapsed[index]) > 1.5)) {
+        fail(context, "Collapsing roles does not restore visible-only column widths");
+      }
+      for (const button of doc.querySelectorAll(".role-name")) button.click();
       let candidate;
       for (const file of report.metrics.fileMetrics) {
         if (!file.diff?.diff || (!file.additions && !file.deletions)) continue;
@@ -176,6 +248,7 @@ function harness(nonce) {
 <script nonce="${nonce}">
   const frame = document.getElementById("preview"), button = document.getElementById("audit");
   const width = document.getElementById("width"), status = document.getElementById("status");
+  const inspectTableLayout = ${inspectTableLayout.toString()};
   const audit = ${auditReview.toString()};
   width.addEventListener("change", () => { frame.width = width.value; });
   frame.addEventListener("load", () => { button.disabled = false; status.textContent = "Ready"; });

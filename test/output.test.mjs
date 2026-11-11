@@ -45,13 +45,33 @@ function reviewHtml(html) {
     attributes = {};
     style = { setProperty(name, value) { this[name] = value; } };
     bounds = { width: 0 };
+    clientWidth = 1000;
     constructor(tag, text = "") { this.tag = tag; this.text = text; }
     get textContent() { return this.text + this.children.map((child) => child.textContent).join(""); }
     set textContent(value) { this.text = value; this.children = []; }
     get childElementCount() { return this.children.length; }
     get firstElementChild() { return this.children[0]; }
     getBoundingClientRect() { return this.bounds; }
-    append(...children) { this.children.push(...children); }
+    append(...children) {
+      for (const child of children) child.parentElement = this;
+      this.children.push(...children);
+    }
+    remove() {
+      if (this.parentElement) this.parentElement.children = this.parentElement.children.filter((child) => child !== this);
+    }
+    cloneNode(deep) {
+      const clone = Object.assign(new Element(this.tag, this.text), {
+        className: this.className, hidden: this.hidden, open: this.open, bounds: { ...this.bounds },
+        attributes: { ...this.attributes }, dataset: { ...this.dataset },
+      });
+      if (deep) clone.append(...this.children.map((child) => child.cloneNode(true)));
+      return clone;
+    }
+    querySelector(selector) {
+      const matches = (node) => selector.startsWith(".") ?
+        (node.className ?? "").split(/\s+/).includes(selector.slice(1)) : node.tag === selector;
+      return this.children.map((child) => descendant(child, matches)).find(Boolean);
+    }
     replaceChildren(...children) { this.text = ""; this.children = children; }
     addEventListener(name, handler) { this.events[name] = handler; }
     focus() { this.focused = true; }
@@ -1043,36 +1063,27 @@ test("Middle path truncation preserves combining characters and joined emoji", (
   }
 });
 
-test("Rows fit wrapped metrics and middle-truncate paths without changing their text", () => {
+test("Table resizing updates middle truncation without retaining measurement cells or stale rows", () => {
   const path = "directory/subdirectory/long-filename.js";
   const page = reviewPage(createReport({
     source: { kind: "fixture", repository: "fixture" }, title: "Resize paths", comparison: {},
     files: [{ path, status: "modified", additions: 1, deletions: 1 }],
   }));
+  categoryToggle(page, "source").events.click();
   const name = descendant(fileRow(page, path), (node) => node.className === "file-name");
   const observer = page.resizeObservers[0];
-  assert.ok(observer.observed.has(name));
-  const metricCell = fileRow(page, path).children[1];
-  metricCell.firstElementChild.bounds.width = 123.4;
+  assert.ok(observer.observed.has(page["footprint-table"]));
   for (const part of name.children) part.firstElementChild.getBoundingClientRect = () => ({ width: 100 });
   for (const [width, truncated] of [[150, "true"], [201, "false"], [199, "true"], [400, "false"]]) {
     name.clientWidth = width;
-    observer.callback([{ target: name }]);
+    observer.callback();
     assert.equal(name.dataset.truncated, truncated);
-    assert.equal(name.style["--path-width"], "200px");
-    assert.equal(metricCell.style.width, "140px");
     assert.equal(name.textContent, path);
+    assert.equal(fileRow(page, path).children.length, 2);
   }
-  metricCell.firstElementChild.bounds.height = 40;
-  name.clientWidth = 260;
-  observer.callback([{ target: name }]);
-  assert.equal(metricCell.style.width, "200px");
-  const category = categoryRow(page, "source");
-  category.children[0].clientWidth = 140;
-  category.children[0].firstElementChild.bounds.width = 60;
-  category.children[1].firstElementChild.bounds = { width: 100, height: 40 };
-  observer.callback([{ target: category }]);
-  assert.equal(category.children[1].style.width, "180px");
   page.scope.events.change();
-  assert.equal(observer.observed.has(name), false);
+  name.clientWidth = 0;
+  observer.callback();
+  assert.equal(name.dataset.truncated, "false");
+  assert.ok(observer.observed.has(page["footprint-table"]));
 });

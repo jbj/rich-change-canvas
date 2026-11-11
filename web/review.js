@@ -1,6 +1,12 @@
 "use strict";
 (() => {
   const $ = (id) => document.getElementById(id);
+  const fitTableColumns = __FIT_TABLE_COLUMNS__;
+  const showError = (error) => {
+    $("error").textContent = `Unable to render report: ${error.message}`;
+    $("error").hidden = false;
+    $("overview").hidden = true;
+  };
   const el = (tag, text, className) => {
     const node = document.createElement(tag);
     if (text !== undefined) node.textContent = text;
@@ -121,41 +127,64 @@
     const reports = JSON.parse($("report-data").textContent);
     if (!Array.isArray(reports) || !reports.length) throw new Error("No reports were provided");
     const pathSegments = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-    const rowViews = new WeakMap();
-    const rowObserver = new ResizeObserver((entries) => {
-      requestAnimationFrame(() => {
-        const views = [...new Set(entries.filter(({ target }) => target.isConnected !== false)
-          .map(({ target }) => rowViews.get(target)))];
-        const layouts = views.map((view) => ({
-          ...view, pathWidth: view.name ? [...view.name.children].reduce((sum, part) =>
-            sum + part.firstElementChild.getBoundingClientRect().width, 0) : 0,
-        }));
-        for (const { metricCell, name, pathWidth } of layouts) {
-          metricCell.style.width = "";
-          if (name) name.style.setProperty("--path-width", `${pathWidth}px`);
+    const table = $("footprint-table");
+    let footprintRows = [], layoutPending = false;
+    function layoutFootprint() {
+      const probes = [];
+      try {
+        const preferred = [0, 0, 0], minimum = [0, 0, 0];
+        for (const { row, cells } of footprintRows) {
+          if (row.hidden) continue;
+          for (const [index, cell] of cells.entries()) {
+            if (cell.hidden) continue;
+            const probe = cell.cloneNode(true);
+            probe.removeAttribute("id");
+            probe.className = `${cell.className ?? ""} column-probe`;
+            probe.setAttribute("aria-hidden", "true");
+            probe.inert = true;
+            row.append(probe);
+            probes.push({ probe, index });
+          }
         }
-        // Fit wrapped counts to their text, then return space their label cannot use.
-        const sizes = layouts.map((layout) => {
-          const { metricCell } = layout;
-          const range = document.createRange();
-          range.selectNodeContents(metricCell.firstElementChild);
-          const bounds = range.getBoundingClientRect(), style = getComputedStyle(metricCell);
-          return { ...layout, wrapped: bounds.height > parseFloat(style.lineHeight) + 2,
-            width: Math.ceil(bounds.width + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)) };
-        });
-        for (const { metricCell, width } of sizes) metricCell.style.width = `${width}px`;
-        const growth = sizes.filter(({ wrapped }) => wrapped).map(({ name, pathWidth, label, labelCell, metricCell, width }) => {
-          const style = labelCell && getComputedStyle(labelCell);
-          const spare = name ? name.clientWidth - pathWidth : labelCell.clientWidth -
-            parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - label.getBoundingClientRect().width;
-          return { metricCell, width: width + Math.max(0, Math.floor(spare)) };
-        });
-        for (const { metricCell, width } of growth) metricCell.style.width = `${width}px`;
-        const states = layouts.filter(({ name }) => name).map(({ name, pathWidth }) =>
-          ({ name, truncated: String(pathWidth > name.clientWidth + 0.5) }));
-        for (const { name, truncated } of states) name.dataset.truncated = truncated;
-      });
-    });
+        for (const { probe, index } of probes) {
+          preferred[index] = Math.max(preferred[index], Math.ceil(probe.getBoundingClientRect().width));
+        }
+        for (const { probe, index } of probes) {
+          if (index === 0) {
+            const label = probe.querySelector(".file-name") ?? probe.querySelector("button") ?? probe;
+            const characters = Array.from(pathSegments.segment(label.textContent), ({ segment }) => segment);
+            if (characters.length > 10) label.textContent = label.className === "file-name" ?
+              `${characters.slice(0, 5).join("")}...${characters.slice(-5).join("")}` : characters.slice(0, 10).join("");
+          } else if (index === 1) {
+            const value = probe.querySelector(".count") ?? probe;
+            value.textContent = "0";
+          }
+        }
+        for (const { probe, index } of probes) {
+          minimum[index] = Math.max(minimum[index], Math.ceil(probe.getBoundingClientRect().width));
+        }
+        const widths = fitTableColumns(table.clientWidth, preferred, minimum);
+        for (const [index, property] of ["--label-column", "--value-column", "--bar-column"].entries()) {
+          table.style.setProperty(property, `${widths[index]}px`);
+        }
+      } catch (error) {
+        showError(error);
+      } finally {
+        for (const { probe } of probes) probe.remove();
+      }
+      const paths = footprintRows.filter(({ row, name }) => !row.hidden && name).map(({ name }) => ({
+        name, truncated: String([...name.children].reduce((sum, part) =>
+          sum + part.firstElementChild.getBoundingClientRect().width, 0) > name.clientWidth + 0.5),
+      }));
+      for (const { name, truncated } of paths) name.dataset.truncated = truncated;
+    }
+    function scheduleLayout() {
+      if (layoutPending) return;
+      layoutPending = true;
+      requestAnimationFrame(() => { layoutPending = false; layoutFootprint(); });
+    }
+    const tableObserver = new ResizeObserver(scheduleLayout);
+    tableObserver.observe(table);
     const definitions = new Map([["lines", { id: "lines", label: "Added / deleted text lines",
       tier: "Language-independent", unit: "lines", mode: "churn",
       description: "Added/deleted physical text lines, including blanks and comments. Binary bytes are separate." }]]);
@@ -365,11 +394,7 @@
         metricCell.append(delta(file));
       }
       row.append(pathCell, metricCell, ...(barCell ? [barCell] : []));
-      const view = { name, metricCell };
-      rowViews.set(name, view);
-      rowViews.set(row, view);
-      rowObserver.observe(name);
-      rowObserver.observe(row);
+      footprintRows.push({ row, name, cells: [pathCell, metricCell, ...(barCell ? [barCell] : [])] });
       return { row, diffRow, details };
     }
     function originalCommits(report) {
@@ -394,7 +419,7 @@
     const expandedRoles = new Set();
     function render(preserveRoles = false) {
       diffViews.clear();
-      rowObserver.disconnect();
+      footprintRows = [{ row: $("footprint-header"), cells: [$("label-heading"), $("value-heading"), $("bar-heading")] }];
       if (preserveRoles !== true) expandedRoles.clear();
       const report = selected(), current = scope(), metrics = current.metrics;
       $("overview").dataset.metricMode = metric().mode;
@@ -449,8 +474,7 @@
           metricCell.append(delta(metric));
         }
         categoryRow.append(nameCell, metricCell, ...(barCell ? [barCell] : []));
-        rowViews.set(categoryRow, { metricCell, label: toggle, labelCell: nameCell });
-        rowObserver.observe(categoryRow);
+        footprintRows.push({ row: categoryRow, cells: [nameCell, metricCell, ...(barCell ? [barCell] : [])] });
         const fileRows = files
           .map(({ file, fileIndex }) => {
             const diffScope = current.fileScopes?.[fileIndex] ?? current.key;
@@ -468,6 +492,7 @@
             row.hidden = !expanded;
             if (diffRow) diffRow.hidden = !expanded || !details.open;
           }
+          scheduleLayout();
         });
         $("category-rows").append(categoryRow, ...fileRows.flatMap(({ row, diffRow }) =>
           diffRow ? [row, diffRow] : [row]));
@@ -476,6 +501,7 @@
       $("role-empty").textContent = !metrics.files ? "No files changed in this scope." :
         inapplicableMetric(metrics) ? "This metric does not apply to files in this scope." : "No changes for this metric.";
       originalCommits(report);
+      scheduleLayout();
     }
     function selectScope(key) {
       $("scope").value = key;
@@ -554,8 +580,6 @@
     $("shape").addEventListener("change", desk);
     load(); desk();
   } catch (error) {
-    $("error").textContent = `Unable to render report: ${error.message}`;
-    $("error").hidden = false;
-    $("overview").hidden = true;
+    showError(error);
   }
 })();

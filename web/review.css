@@ -55,6 +55,7 @@ button, input, select {
   font: inherit; color: var(--text); background: var(--bg);
   border: 1px solid var(--border); border-radius: 3px; padding: 3px 6px; max-width: 100%; min-width: 0;
 }
+select { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 button { cursor: pointer; }
 button:hover { background: var(--panel); }
 button[aria-pressed="true"], button[aria-current="true"] { color: var(--blue); background: var(--panel); outline: 1px solid var(--blue); outline-offset: -1px; }
@@ -62,19 +63,18 @@ button[aria-pressed="true"], button[aria-current="true"] { color: var(--blue); b
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 8px 0 4px; }
 label { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; color: var(--muted); }
 .scope-control { flex: 1; }
-.scope-control select { flex: 1; }
+.scope-control select, #report-control select { flex: 1; width: 0; }
 #report-control { flex: 1; }
 #scope-note { font-size: 10px; margin: 0 0 8px; }
 .panel { border: 1px solid var(--border); border-radius: 3px; padding: 8px 10px; min-width: 0; margin-bottom: 8px; }
 .dashboard { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: start; }
 .totals { display: flex; flex-wrap: wrap; gap: 8px 22px; background: var(--panel); border-block: 1px solid var(--border); padding: 8px 10px; margin: 8px 0; }
-.stat { display: flex; align-items: baseline; gap: 6px; }
+.stat { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; min-width: 0; max-width: 100%; }
 .num { font-size: 18px; line-height: 22px; font-weight: 600; }
 .stat-label { color: var(--muted); font-size: 10px; }
 .footprint-table { width: 100%; max-width: 100%; table-layout: fixed; }
 .footprint-table th, .footprint-table td { padding: 4px 8px; }
-.footprint-table th:nth-child(1), .footprint-table td:nth-child(1) { width: 45%; }
-.footprint-table th:nth-child(2), .footprint-table td:nth-child(2) { white-space: nowrap; overflow-wrap: anywhere; }
+.footprint-table th:nth-child(2), .footprint-table td:nth-child(2) { width: clamp(110px, 25%, 180px); overflow-wrap: anywhere; }
 .footprint-table th:nth-child(3), .footprint-table td:nth-child(3) { width: 80px; }
 .role-name { font: inherit; color: var(--text); background: transparent; border: 0; border-radius: 0; padding: 2px 0; text-align: left; overflow-wrap: anywhere; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
 .role-name[aria-expanded="true"] { color: var(--blue); }
@@ -88,7 +88,8 @@ label { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 1
 .role-documentation, .role-configuration, .role-markup, .role-localization, .role-data { --role-color: var(--cyan); }
 .role-manifest, .role-lockfile, .role-other { --role-color: var(--amber); }
 .role-generated, .role-binary { --role-color: var(--muted); }
-.count { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.count { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.count .added, .count .deleted { display: inline-block; max-width: 100%; }
 .mini-bar { width: 64px; height: 7px; display: block; overflow: hidden; }
 .bar-before { fill: var(--muted); }
 .bar-after { fill: var(--blue); }
@@ -97,10 +98,8 @@ label { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 1
 #metric-note { font-size: 10px; line-height: 15px; margin: 0 0 8px; }
 .num.coverage { font: inherit; font-size: 10px; line-height: 15px; max-width: 44em; }
 .alternative-metric .count { white-space: normal; }
-.bar-metric .footprint-table th:nth-child(1),
-.bar-metric .footprint-table td:nth-child(1) { width: 38%; }
 .bar-metric .footprint-table th:nth-child(2),
-.bar-metric .footprint-table td:nth-child(2) { width: calc(62% - 80px); white-space: normal; }
+.bar-metric .footprint-table td:nth-child(2) { width: clamp(140px, 40%, 360px); }
 .legend { display: flex; flex-wrap: wrap; gap: 0 8px; font-size: 9px; line-height: 14px; margin: 6px 0 0; }
 details > summary { cursor: pointer; overflow-wrap: anywhere; }
 details > summary:hover { text-decoration: underline; text-underline-offset: 2px; }
@@ -112,10 +111,21 @@ details details { padding: 5px 0; border-top: 1px solid var(--border); }
 .commit button:hover { color: var(--blue); text-decoration-style: solid; }
 .commit .history-row { padding-inline: 2px; font-size: 10px; }
 code { font: inherit; overflow-wrap: anywhere; }
-.file-name { color: var(--blue); }
-.file-meta { margin-left: 8px; color: var(--muted); font-size: 10px; }
+.file-summary { display: flex; align-items: baseline; gap: 6px; list-style: none; }
+.file-summary::-webkit-details-marker { display: none; }
+.file-summary::before { content: "▸"; flex: none; color: var(--muted); }
+details[open] > .file-summary::before { content: "▾"; }
+.file-name { display: flex; flex-direction: column; align-items: stretch; min-width: 0; flex: 1; color: var(--blue); }
+.file-directory { order: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 10px; line-height: 14px; }
+.file-basename { min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.file-meta { flex: none; color: var(--muted); font-size: 10px; white-space: nowrap; }
+.full-path { overflow-wrap: anywhere; user-select: text; }
+.diff-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+.wrap-control { color: var(--text); cursor: pointer; }
+.wrap-control input { margin: 0; }
 .file-diff { display: inline-block; margin: 2px 0 4px; }
 .diff-content { contain: inline-size; overflow: auto; max-height: 420px; margin: 6px 0; padding: 8px; background: var(--panel); font: inherit; font-family: var(--font-mono, "SFMono-Regular", Consolas, "Liberation Mono", monospace); font-size: 11px; line-height: 16px; white-space: pre; }
+.diff-content[data-wrap="true"] { white-space: pre-wrap; overflow-wrap: anywhere; }
 .diff-added { color: var(--green); }
 .diff-deleted { color: var(--red); }
 .diff-hunk { color: var(--purple); }

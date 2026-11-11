@@ -57,7 +57,14 @@ incomplete success-shaped results.
 The **change review dashboard** puts scope controls, coloured line deltas,
 numeric role summaries, and collapsible commits on one compact screen, without tabs.
 Expand a role to see its file list in the same diffstat columns; expand a file
-to display its diff inline, with a GitHub link when available. The live canvas
+to display its complete, copyable path and diff inline, with a GitHub link when
+available. File rows prioritize the basename and shorten directory prefixes;
+expanded rows also show the previous path for renames. Long basenames occupy
+at most two lines in the compact row, without shortening the expanded path.
+Diffs preserve formatting with local horizontal scrolling by default.
+**Wrap lines** wraps long code and unbroken tokens without changing patch text;
+the choice applies to other open and newly opened diffs for that page session.
+Diff regions are keyboard-focusable and scroll independently. The live canvas
 loads local diffs on demand up to 256 KiB; CLI reports embed diffs for committed,
 original-commit, and requested working scopes so they work offline.
 Expand Original commits to select a commit and update the same overview;
@@ -310,6 +317,23 @@ reopened with `node cli.mjs view --input <report-id>.json --out <directory>`.
 Use **Report** to switch PRs, or expand **Compare reports** to search by
 repository or title and compare footprints. Select an original commit using
 **Scope** or **Original commits**; expand a role to inspect its file list.
+
+For repeatable browser inspection, run the dependency-free development helper:
+
+```sh
+node research/browser-review.mjs /tmp/sample-gallery/review.html
+```
+
+Open the printed loopback URL in a browser. **Viewport** sets a real iframe
+viewport to 480, 640, 800, 1024, or 1280 CSS pixels. **Audit all reports**
+checks every report, scope, and metric, then opens each report's longest-line
+diff in both wrapping modes. It checks rendering errors, page/metric overflow,
+full-path access, diff containment, and exact patch text. Copy the resulting
+JSON outside the repository; use browser screenshot tools for visual checks.
+The helper serves only the specified HTML and its inspection page on loopback,
+does not modify the report or its CSP, and needs no package installation.
+Stop it with Ctrl-C when finished. Layout checks complement, rather than
+replace, visual and keyboard inspection and fresh-provider canvas checks.
 For a quick tour, try these repositories:
 
 | Repository | What to look at |

@@ -7,6 +7,8 @@
     if (className) node.className = className;
     return node;
   };
+  let wrapLines = false;
+  const diffViews = new Set();
   const roles = {
     source: "Source", test: "Tests", "test-support": "Test support",
     fixture: "Inputs", snapshot: "Snapshots", documentation: "Docs",
@@ -49,22 +51,26 @@
   }
   function renderDiff(node, patch) {
     node.replaceChildren();
-    for (const line of patch.split("\n")) {
+    const lines = patch.split("\n");
+    for (const [index, line] of lines.entries()) {
       const className = line.startsWith("+++") || line.startsWith("---") || line.startsWith("diff --git") ? "diff-meta" :
         line.startsWith("+") ? "diff-added" : line.startsWith("-") ? "diff-deleted" :
           line.startsWith("@@") ? "diff-hunk" : "";
-      node.append(el("span", line, className), document.createTextNode("\n"));
+      if (index) node.append(document.createTextNode("\n"));
+      node.append(el("span", line, className));
     }
   }
-  function loadLocalDiff(details, file, scopeKey, diffCell, diffRow, isCategoryExpanded) {
+  function loadLocalDiff(details, file, scopeKey, diffCell, diffRow, tools, isCategoryExpanded) {
     let loaded = false;
     details.addEventListener("toggle", () => {
       diffRow.hidden = !details.open || !isCategoryExpanded();
-      if (!details.open || loaded) return;
+      if (!details.open || loaded || (!file.diff && !scopeKey)) return;
       loaded = true;
       const output = el("pre", "Loading diff…", "diff-content");
       output.setAttribute("role", "region");
       output.setAttribute("aria-label", `Diff for ${file.path}`);
+      output.setAttribute("tabindex", "0");
+      output.setAttribute("aria-busy", "true");
       diffCell.append(output);
       const query = `scope=${encodeURIComponent(scopeKey)}&path=${encodeURIComponent(file.path)}`;
       (file.diff ? Promise.resolve(file.diff) : fetch(`/diff?${query}`)
@@ -74,12 +80,31 @@
           return result;
         }))
         .then((result) => {
+          if (output.isConnected === false) return;
           if (result.tooLarge) output.textContent = "Diff is too large to display here.";
           else if (result.binary) output.textContent = "Binary file; no text diff.";
           else if (!result.diff) output.textContent = "No textual changes in this scope.";
-          else renderDiff(output, result.diff);
+          else {
+            renderDiff(output, result.diff);
+            const label = el("label", undefined, "wrap-control");
+            const input = el("input");
+            input.type = "checkbox";
+            input.checked = wrapLines;
+            output.dataset.wrap = String(wrapLines);
+            label.append(input, document.createTextNode("Wrap lines"));
+            tools.append(label);
+            diffViews.add({ input, output });
+            input.addEventListener("change", () => {
+              wrapLines = input.checked;
+              for (const view of diffViews) {
+                view.input.checked = wrapLines;
+                view.output.dataset.wrap = String(wrapLines);
+              }
+            });
+          }
         })
-        .catch((error) => { output.textContent = `Unable to load diff: ${error.message}`; });
+        .catch((error) => { output.textContent = `Unable to load diff: ${error.message}`; })
+        .finally(() => output.setAttribute("aria-busy", "false"));
     });
   }
   try {
@@ -243,29 +268,37 @@
       row.dataset.category = file.category;
       row.hidden = true;
       const details = el("details");
-      const summary = el("summary");
-      summary.append(el("code", file.path, "file-name"), el("span", file.status, "file-meta"));
+      const summary = el("summary", undefined, "file-summary");
+      summary.setAttribute("aria-label", `${file.path} (${file.status})`);
+      summary.title = file.path;
+      const name = el("code", undefined, "file-name");
+      const slash = file.path.lastIndexOf("/");
+      if (slash >= 0) name.append(el("span", file.path.slice(0, slash + 1), "file-directory"));
+      name.append(el("span", file.path.slice(slash + 1), "file-basename"));
+      summary.append(name, el("span", file.status, "file-meta"));
       details.append(summary);
-      if (file.previousPath) details.append(el("p", `Previous path: ${file.previousPath}`));
-      let diffRow;
+      const diffRow = el("tr", undefined, "diff-row");
+      diffRow.hidden = true;
+      diffRow.dataset.filePath = file.path;
+      const diffCell = el("td");
+      diffCell.colSpan = showsBars() ? 3 : 2;
+      diffCell.append(el("p", file.path, "full-path"));
+      if (file.previousPath) diffCell.append(el("p", `Previous path: ${file.previousPath}`, "full-path muted"));
+      const tools = el("div", undefined, "diff-tools");
+      diffCell.append(tools);
+      diffRow.append(diffCell);
       if (url) {
         const diffLink = el("a", "Open diff ↗", "file-diff");
         diffLink.href = url;
         diffLink.target = "_blank";
         diffLink.rel = "noreferrer noopener";
-        details.append(diffLink);
+        tools.append(diffLink);
       }
-      if (file.diff || selected().source.kind === "local") {
-        diffRow = el("tr", undefined, "diff-row");
-        diffRow.hidden = true;
-        diffRow.dataset.filePath = file.path;
-        const diffCell = el("td");
-        diffCell.colSpan = showsBars() ? 3 : 2;
-        diffRow.append(diffCell);
-        loadLocalDiff(details, file, diffScope, diffCell, diffRow, isCategoryExpanded);
-      } else if (!url) {
-        details.append(el("p", "Diff not included in this report.", "muted"));
+      const localScope = selected().source.kind === "local" ? diffScope : null;
+      if (!file.diff && !localScope) {
+        diffCell.append(el("p", file.binary ? "Binary file; no text diff." : "Diff not included in this report.", "muted"));
       }
+      loadLocalDiff(details, file, localScope, diffCell, diffRow, tools, isCategoryExpanded);
       const pathCell = el("td");
       pathCell.append(details);
       const metricCell = el("td");
@@ -302,6 +335,7 @@
     }
     const expandedRoles = new Set();
     function render(preserveRoles = false) {
+      diffViews.clear();
       if (preserveRoles !== true) expandedRoles.clear();
       const report = selected(), current = scope(), metrics = current.metrics;
       $("overview").dataset.metricMode = metric().mode;

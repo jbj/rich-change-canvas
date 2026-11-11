@@ -34,6 +34,7 @@ function reviewPage(...reports) {
 
 function reviewHtml(html) {
   const fetchRequests = [];
+  const resizeObservers = [];
   class Element {
     children = [];
     value = "";
@@ -42,12 +43,36 @@ function reviewHtml(html) {
     dataset = {};
     events = {};
     attributes = {};
+    style = { setProperty(name, value) { this[name] = value; } };
+    bounds = { width: 0 };
+    clientWidth = 1000;
     constructor(tag, text = "") { this.tag = tag; this.text = text; }
     get textContent() { return this.text + this.children.map((child) => child.textContent).join(""); }
     set textContent(value) { this.text = value; this.children = []; }
     get childElementCount() { return this.children.length; }
-    append(...children) { this.children.push(...children); }
-    replaceChildren(...children) { this.children = children; }
+    get firstElementChild() { return this.children[0]; }
+    getBoundingClientRect() { return this.bounds; }
+    append(...children) {
+      for (const child of children) child.parentElement = this;
+      this.children.push(...children);
+    }
+    remove() {
+      if (this.parentElement) this.parentElement.children = this.parentElement.children.filter((child) => child !== this);
+    }
+    cloneNode(deep) {
+      const clone = Object.assign(new Element(this.tag, this.text), {
+        className: this.className, hidden: this.hidden, open: this.open, bounds: { ...this.bounds },
+        attributes: { ...this.attributes }, dataset: { ...this.dataset },
+      });
+      if (deep) clone.append(...this.children.map((child) => child.cloneNode(true)));
+      return clone;
+    }
+    querySelector(selector) {
+      const matches = (node) => selector.startsWith(".") ?
+        (node.className ?? "").split(/\s+/).includes(selector.slice(1)) : node.tag === selector;
+      return this.children.map((child) => descendant(child, matches)).find(Boolean);
+    }
+    replaceChildren(...children) { this.text = ""; this.children = children; }
     addEventListener(name, handler) { this.events[name] = handler; }
     focus() { this.focused = true; }
     setAttribute(name, value) { this.attributes[name] = value; }
@@ -64,15 +89,29 @@ function reviewHtml(html) {
     createElement: (tag) => new Element(tag),
     createElementNS: (namespace, tag) => new Element(tag),
     createTextNode: (text) => new Element("#text", text),
+    createRange: () => ({
+      selectNodeContents(node) { this.node = node; },
+      getBoundingClientRect() { return this.node.getBoundingClientRect(); },
+    }),
   };
   const fetch = async (url) => {
     fetchRequests.push(url);
     return { ok: true, status: 200, json: async () => ({ diff: "@@ -1 +1 @@\n-value = 1\n+value = 2\n" }) };
   };
   const script = html.match(/<script nonce="[^"]+">([\s\S]*?)<\/script>/)[1];
-  runInNewContext(script, { document, URL, fetch, encodeURIComponent });
+  class ResizeObserver {
+    observed = new Set();
+    constructor(callback) { this.callback = callback; resizeObservers.push(this); }
+    observe(node) { this.observed.add(node); }
+    disconnect() { this.observed.clear(); }
+  }
+  runInNewContext(script, {
+    document, URL, fetch, encodeURIComponent, ResizeObserver, requestAnimationFrame: (callback) => callback(),
+    getComputedStyle: () => ({ paddingLeft: "8px", paddingRight: "8px", lineHeight: "18px" }),
+  });
   assert.equal(nodes.error.textContent, "");
   nodes.fetchRequests = fetchRequests;
+  nodes.resizeObservers = resizeObservers;
   return nodes;
 }
 
@@ -90,6 +129,13 @@ function fileRow(page, path) {
 function diffRow(page, path) {
   return page["category-rows"].children.find((row) =>
     row.className === "diff-row" && row.dataset.filePath === path);
+}
+function descendant(node, predicate) {
+  if (predicate(node)) return node;
+  for (const child of node.children) {
+    const found = descendant(child, predicate);
+    if (found) return found;
+  }
 }
 function fileRows(page) {
   return page["category-rows"].children.filter((row) => row.className === "file-row");
@@ -337,7 +383,7 @@ test("Zero-text commit navigation retains rename evidence with neutral ±0", () 
   categoryToggle(page, "source").events.click();
   assert.equal(fileRow(page, "new.js").children[1].textContent, "±0");
   assert.equal(fileRow(page, "new.js").children[1].children[0].children[0].className, "zero");
-  assert.match(fileRow(page, "new.js").textContent, /Previous path: old.js/);
+  assert.match(diffRow(page, "new.js").textContent, /Previous path: old.js/);
 });
 
 test("Counts with unavailable patches show honest diffstat availability and known whole-file totals", () => {
@@ -647,7 +693,7 @@ test("Text-line roles and files use balanced numeric columns without bars", () =
   assert.equal(fileRow(page, "src/main.js").hidden, true);
   categoryToggle(page, "documentation").events.click();
   assert.equal(docFile.hidden, false);
-  assert.match(docFile.textContent, /Previous path: docs\/old.md/);
+  assert.match(diffRow(page, "docs/new.md").textContent, /Previous path: docs\/old.md/);
   categoryToggle(page, "documentation").events.click();
   assert.equal(docFile.hidden, true);
   assert.equal(testFile.hidden, false);
@@ -707,7 +753,7 @@ test("Commit selection updates grouped file diffs and retains the commit link", 
   const sourceFile = fileRow(page, "src/main.js");
   categoryToggle(page, "source").events.click();
   assert.equal(sourceFile.hidden, false);
-  assert.equal(sourceFile.children[0].children[0].children.find((child) => child.tag === "a").href,
+  assert.equal(descendant(diffRow(page, "src/main.js"), (node) => node.tag === "a").href,
     "https://github.com/example/project/pull/1/files");
   page["commit-list"].children[1].children[0].events.click();
   assert.equal(page.scope.value, "commit:1");
@@ -718,7 +764,7 @@ test("Commit selection updates grouped file diffs and retains the commit link", 
   assert.equal(mergeFile.hidden, false);
   assert.equal(page["commit-list"].children[1].children[0].attributes["aria-current"], "true");
   assert.equal(page["commit-list"].children[1].children[0].focused, true);
-  assert.equal(mergeFile.children[0].children[0].children.find((child) => child.tag === "a").href,
+  assert.equal(descendant(diffRow(page, "test/merge.test.js"), (node) => node.tag === "a").href,
     "https://github.com/example/project/commit/merge");
   assert.equal(page["commit-link"].href, "https://github.com/example/project/commit/merge");
   assert.equal(page["commit-link"].hidden, false);
@@ -815,15 +861,14 @@ test("Retained corpus reports remain viewable offline with navigable real PR sco
   run("node", [cli, "view", "--input", join(output, `${reports[0].id}.json`), "--out", join(output, "reopened")]);
   const page = reviewHtml(html);
   assert.doesNotMatch(html, /table-spacer|<th[^>]*>Churn<\/th>/);
-  const style = html.match(/<style[^>]*>([\s\S]*?)<\/style>/)[1];
-  assert.match(style, /\.footprint-table\s*\{[^}]*table-layout:\s*fixed/);
-  assert.match(style, /\.footprint-table th:nth-child\(1\),\s*\.footprint-table td:nth-child\(1\)\s*\{\s*width:\s*45%/);
   assert.equal(page["report-rows"].children.length, 30);
   const descendants = (node) => [node, ...node.children.flatMap(descendants)];
   function assertNumericColumns() {
     assert.equal(page["bar-heading"].hidden, true);
     assert.equal(page["metric-legend"].hidden, true);
-    for (const row of page["category-rows"].children) assert.equal(row.children.length, 2);
+    for (const row of page["category-rows"].children) {
+      if (row.className !== "diff-row") assert.equal(row.children.length, 2);
+    }
     assert.equal(descendants(page["category-rows"]).some((node) => node.tag === "svg"), false);
     assert.equal(descendants(page["commit-list"]).some((node) => node.tag === "svg"), false);
   }
@@ -848,7 +893,7 @@ test("Retained corpus reports remain viewable offline with navigable real PR sco
     assert.equal(firstFileRow.hidden, true);
     categoryToggle(page, firstFile.category).events.click();
     assert.equal(firstFileRow.hidden, false);
-    assert.equal(firstFileRow.children[0].children[0].children.some((child) => child.tag === "a"), true);
+    assert.ok(descendant(diffRow(page, firstFile.path), (node) => node.tag === "a"));
   }
   const merge = reports.find((report) => report.source.repository === "elastic/elasticsearch");
   assert.equal(merge.metrics.churn, 14);
@@ -861,7 +906,7 @@ test("Retained corpus reports remain viewable offline with navigable real PR sco
   const firstCommitFileRow = fileRow(page, firstCommitFile.path);
   categoryToggle(page, firstCommitFile.category).events.click();
   assert.equal(firstCommitFileRow.hidden, false);
-  assert.equal(firstCommitFileRow.children[0].children[0].children.find((child) => child.tag === "a").href,
+  assert.equal(descendant(diffRow(page, firstCommitFile.path), (node) => node.tag === "a").href,
     merge.commits[index].url);
   page.shape.value = "binary";
   page.shape.events.change();
@@ -899,4 +944,152 @@ test("Embedded diffs render without requests in GitHub and original-commit scope
     assert.match(diffRow(page, "value.js").textContent, new RegExp(expected));
   }
   assert.deepEqual(page.fetchRequests, []);
+});
+
+test("Compact filenames retain full accessible and expanded paths without requiring text diffs", () => {
+  const path = `${"directory/".repeat(40)}${"basename".repeat(40)}<unsafe>.js`;
+  const report = createReport({
+    source: { kind: "fixture", repository: "fixture" }, title: "Long paths", comparison: {},
+    files: [
+      { path, previousPath: "previous/<unsafe>.js", status: "renamed", additions: 0, deletions: 0 },
+      { path: "assets/logo.bin", status: "modified", binary: true, additions: 0, deletions: 0,
+        beforeBytes: 4, afterBytes: 9 },
+      { path: "README.md", status: "modified", additions: 1, deletions: 1 },
+    ],
+  });
+  const page = reviewPage(report);
+  categoryToggle(page, "source").events.click();
+  const details = fileRow(page, path).children[0].children[0], summary = details.children[0];
+  assert.equal(summary.attributes["aria-label"], `${path} (renamed)`);
+  const name = descendant(summary, (node) => node.className === "file-name");
+  assert.equal(name.textContent, path);
+  assert.equal(name.children[0].className, "path-prefix");
+  assert.equal(name.children[1].className, "path-suffix");
+  assert.equal(name.children[1].children[0].attributes.dir, "ltr");
+  assert.equal(diffRow(page, path).hidden, true);
+  details.open = true;
+  details.events.toggle();
+  assert.equal(diffRow(page, path).hidden, false);
+  assert.equal(descendant(diffRow(page, path), (node) => node.className === "full-path").textContent, path);
+  assert.match(diffRow(page, path).textContent, /Previous path: previous\/<unsafe>.js/);
+  assert.match(diffRow(page, path).textContent, /Diff not included/);
+  assert.match(diffRow(page, "assets/logo.bin").textContent, /Binary file; no text diff/);
+  assert.match(diffRow(page, "README.md").textContent, /Diff not included/);
+  assert.equal(descendant(diffRow(page, path), (node) => node.tag === "input"), undefined);
+  categoryToggle(page, "source").events.click();
+  assert.equal(diffRow(page, path).hidden, true);
+  categoryToggle(page, "source").events.click();
+  assert.equal(diffRow(page, path).hidden, false);
+  assert.deepEqual(page.fetchRequests, []);
+});
+
+test("Wrapping preserves exact patch text and synchronizes current and newly opened diffs across selections", async () => {
+  const patch = `@@ -1 +1 @@\n-${"old".repeat(100)}\n+\t<unsafe>${"new".repeat(100)}`;
+  const file = (path, diff = patch) => ({ ...metricFile(path, "old\n", "new\n"), diff: { diff } });
+  const first = createReport({
+    source: { kind: "fixture", repository: "fixture" }, title: "Wrap first", comparison: {},
+    files: [file("first.js"), file("second.js", `${patch}\n`)],
+    commits: [{ sha: "head", parentSha: "base", parentCount: 1, subject: "Change", files: [file("first.js")] }],
+  });
+  const second = createReport({
+    source: first.source, title: "Wrap second", comparison: {}, files: [file("first.js")],
+  });
+  const page = reviewPage(first, second);
+  const open = async (path) => {
+    const row = fileRow(page, path);
+    if (row.hidden) categoryToggle(page, row.dataset.category).events.click();
+    const details = row.children[0].children[0];
+    details.open = true;
+    details.events.toggle();
+    await new Promise((resolve) => setImmediate(resolve));
+    const output = descendant(diffRow(page, path), (node) => node.tag === "pre");
+    const input = descendant(diffRow(page, path), (node) => node.tag === "input");
+    assert.equal(output.attributes["aria-busy"], "false");
+    assert.equal(output.attributes.tabindex, "0");
+    assert.equal(descendant(diffRow(page, path), (node) => node.className === "full-path"), undefined);
+    return { output, input };
+  };
+  const a = await open("first.js"), b = await open("second.js");
+  assert.equal(a.input.checked, false);
+  assert.equal(a.output.dataset.wrap, "false");
+  a.input.checked = true;
+  a.input.events.change();
+  assert.equal(a.output.textContent, patch);
+  assert.equal(b.output.textContent, `${patch}\n`);
+  assert.equal(a.output.dataset.wrap, "true");
+  assert.equal(b.output.dataset.wrap, "true");
+  assert.equal(b.input.checked, true);
+  for (const [control, value] of [["metric", "bytes"], ["scope", "commit:0"], ["report", "1"]]) {
+    page[control].value = value;
+    page[control].events.change();
+    const next = await open("first.js");
+    assert.equal(next.input.checked, true);
+    assert.equal(next.output.dataset.wrap, "true");
+    assert.equal(next.output.textContent, patch);
+  }
+  assert.deepEqual(page.fetchRequests, []);
+});
+
+test("Rows omit all filename status labels and zero binary totals without hiding changed files", () => {
+  const report = createReport({
+    source: { kind: "fixture", repository: "fixture" }, title: "Less noise", comparison: {},
+    files: [
+      { path: "src/modified.js", status: "modified", additions: 2, deletions: 1 },
+      { path: "src/added.js", status: "added", additions: 1, deletions: 0 },
+      { path: "src/old.js", status: "removed", additions: 0, deletions: 1 },
+      { path: "src/renamed.js", previousPath: "src/before.js", status: "renamed", additions: 0, deletions: 0 },
+      { path: "src/copied.js", previousPath: "src/before.js", status: "copied", additions: 0, deletions: 0 },
+    ],
+  });
+  const page = reviewPage(report);
+  assert.doesNotMatch(page.totals.textContent, /binary files/);
+  assert.equal(page.totals.children.length, 2);
+  categoryToggle(page, "source").events.click();
+  for (const { path, status } of report.metrics.fileMetrics) {
+    const row = fileRow(page, path);
+    const summary = descendant(row, (node) => node.tag === "summary");
+    assert.equal(row.hidden, false);
+    assert.equal(summary.textContent, path);
+    assert.equal(summary.children.length, 1);
+    assert.equal(summary.attributes["aria-label"], `${path} (${status})`);
+  }
+  assert.match(reviewPage(sample()).totals.textContent, /1binary files/);
+});
+
+test("Middle path truncation preserves combining characters and joined emoji", () => {
+  const paths = ["ab\u0301", "a👩🏽‍💻"];
+  const page = reviewPage(createReport({
+    source: { kind: "fixture", repository: "fixture" }, title: "Unicode paths", comparison: {},
+    files: paths.map((path) => ({ path, status: "modified", additions: 1, deletions: 1 })),
+  }));
+  for (const path of paths) {
+    const name = descendant(fileRow(page, path), (node) => node.className === "file-name");
+    assert.equal(name.children[0].textContent, "a");
+    assert.equal(name.children[1].textContent, path.slice(1));
+  }
+});
+
+test("Table resizing updates middle truncation without retaining measurement cells or stale rows", () => {
+  const path = "directory/subdirectory/long-filename.js";
+  const page = reviewPage(createReport({
+    source: { kind: "fixture", repository: "fixture" }, title: "Resize paths", comparison: {},
+    files: [{ path, status: "modified", additions: 1, deletions: 1 }],
+  }));
+  categoryToggle(page, "source").events.click();
+  const name = descendant(fileRow(page, path), (node) => node.className === "file-name");
+  const observer = page.resizeObservers[0];
+  assert.ok(observer.observed.has(page["footprint-table"]));
+  for (const part of name.children) part.firstElementChild.getBoundingClientRect = () => ({ width: 100 });
+  for (const [width, truncated] of [[150, "true"], [201, "false"], [199, "true"], [400, "false"]]) {
+    name.clientWidth = width;
+    observer.callback();
+    assert.equal(name.dataset.truncated, truncated);
+    assert.equal(name.textContent, path);
+    assert.equal(fileRow(page, path).children.length, 2);
+  }
+  page.scope.events.change();
+  name.clientWidth = 0;
+  observer.callback();
+  assert.equal(name.dataset.truncated, "false");
+  assert.ok(observer.observed.has(page["footprint-table"]));
 });

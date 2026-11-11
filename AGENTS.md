@@ -10,6 +10,10 @@ node --test test/output.test.mjs
 npm test
 ```
 
+For Footprint table changes, follow the
+[layout contract and testing guide](docs/footprint-table.md), including column
+sizing priorities, synthetic edge cases, and corpus browser checks.
+
 ## Testing the live canvas
 
 The extension imports modules once, and the renderer loads its HTML, CSS,

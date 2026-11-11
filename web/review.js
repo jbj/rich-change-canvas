@@ -1,12 +1,22 @@
 "use strict";
 (() => {
   const $ = (id) => document.getElementById(id);
+  const fitTableColumns = __FIT_TABLE_COLUMNS__;
+  const showError = (error) => {
+    $("error").textContent = `Unable to render report: ${error.message}`;
+    $("error").hidden = false;
+    $("overview").hidden = true;
+  };
   const el = (tag, text, className) => {
     const node = document.createElement(tag);
     if (text !== undefined) node.textContent = text;
     if (className) node.className = className;
+    const role = { tr: "row", td: "cell", th: "columnheader" }[tag];
+    if (role) node.setAttribute("role", role);
     return node;
   };
+  let wrapLines = false;
+  const diffViews = new Set();
   const roles = {
     source: "Source", test: "Tests", "test-support": "Test support",
     fixture: "Inputs", snapshot: "Snapshots", documentation: "Docs",
@@ -49,22 +59,30 @@
   }
   function renderDiff(node, patch) {
     node.replaceChildren();
-    for (const line of patch.split("\n")) {
+    const lines = patch.split("\n");
+    for (const [index, line] of lines.entries()) {
       const className = line.startsWith("+++") || line.startsWith("---") || line.startsWith("diff --git") ? "diff-meta" :
         line.startsWith("+") ? "diff-added" : line.startsWith("-") ? "diff-deleted" :
           line.startsWith("@@") ? "diff-hunk" : "";
-      node.append(el("span", line, className), document.createTextNode("\n"));
+      if (index) node.append(document.createTextNode("\n"));
+      node.append(el("span", line, className));
     }
   }
-  function loadLocalDiff(details, file, scopeKey, diffCell, diffRow, isCategoryExpanded) {
+  function filePaths(node, file) {
+    node.append(el("p", file.path, "full-path"));
+    if (file.previousPath) node.append(el("p", `Previous path: ${file.previousPath}`, "full-path muted"));
+  }
+  function loadLocalDiff(details, file, scopeKey, diffCell, diffRow, tools, isCategoryExpanded) {
     let loaded = false;
     details.addEventListener("toggle", () => {
       diffRow.hidden = !details.open || !isCategoryExpanded();
-      if (!details.open || loaded) return;
+      if (!details.open || loaded || (!file.diff && !scopeKey)) return;
       loaded = true;
       const output = el("pre", "Loading diff…", "diff-content");
       output.setAttribute("role", "region");
       output.setAttribute("aria-label", `Diff for ${file.path}`);
+      output.setAttribute("tabindex", "0");
+      output.setAttribute("aria-busy", "true");
       diffCell.append(output);
       const query = `scope=${encodeURIComponent(scopeKey)}&path=${encodeURIComponent(file.path)}`;
       (file.diff ? Promise.resolve(file.diff) : fetch(`/diff?${query}`)
@@ -74,17 +92,99 @@
           return result;
         }))
         .then((result) => {
+          if (output.isConnected === false) return;
+          if (result.tooLarge || result.binary || !result.diff) filePaths(diffCell, file);
           if (result.tooLarge) output.textContent = "Diff is too large to display here.";
           else if (result.binary) output.textContent = "Binary file; no text diff.";
           else if (!result.diff) output.textContent = "No textual changes in this scope.";
-          else renderDiff(output, result.diff);
+          else {
+            renderDiff(output, result.diff);
+            const label = el("label", undefined, "wrap-control");
+            const input = el("input");
+            input.type = "checkbox";
+            input.checked = wrapLines;
+            output.dataset.wrap = String(wrapLines);
+            label.append(input, document.createTextNode("Wrap lines"));
+            tools.append(label);
+            diffViews.add({ input, output });
+            input.addEventListener("change", () => {
+              wrapLines = input.checked;
+              for (const view of diffViews) {
+                view.input.checked = wrapLines;
+                view.output.dataset.wrap = String(wrapLines);
+              }
+            });
+          }
         })
-        .catch((error) => { output.textContent = `Unable to load diff: ${error.message}`; });
+        .catch((error) => {
+          output.textContent = `Unable to load diff: ${error.message}`;
+          filePaths(diffCell, file);
+        })
+        .finally(() => output.setAttribute("aria-busy", "false"));
     });
   }
   try {
     const reports = JSON.parse($("report-data").textContent);
     if (!Array.isArray(reports) || !reports.length) throw new Error("No reports were provided");
+    const pathSegments = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+    const table = $("footprint-table");
+    let footprintRows = [], layoutPending = false;
+    function layoutFootprint() {
+      const probes = [];
+      try {
+        const preferred = [0, 0, 0], minimum = [0, 0, 0];
+        for (const { row, cells } of footprintRows) {
+          if (row.hidden) continue;
+          for (const [index, cell] of cells.entries()) {
+            if (cell.hidden) continue;
+            const probe = cell.cloneNode(true);
+            probe.removeAttribute("id");
+            probe.className = `${cell.className ?? ""} column-probe`;
+            probe.setAttribute("aria-hidden", "true");
+            probe.inert = true;
+            row.append(probe);
+            probes.push({ probe, index });
+          }
+        }
+        for (const { probe, index } of probes) {
+          preferred[index] = Math.max(preferred[index], Math.ceil(probe.getBoundingClientRect().width));
+        }
+        for (const { probe, index } of probes) {
+          if (index === 0) {
+            const label = probe.querySelector(".file-name") ?? probe.querySelector("button") ?? probe;
+            const characters = Array.from(pathSegments.segment(label.textContent), ({ segment }) => segment);
+            if (characters.length > 10) label.textContent = label.className === "file-name" ?
+              `${characters.slice(0, 5).join("")}...${characters.slice(-5).join("")}` : characters.slice(0, 10).join("");
+          } else if (index === 1) {
+            const value = probe.querySelector(".count") ?? probe;
+            value.textContent = "0";
+          }
+        }
+        for (const { probe, index } of probes) {
+          minimum[index] = Math.max(minimum[index], Math.ceil(probe.getBoundingClientRect().width));
+        }
+        const widths = fitTableColumns(table.clientWidth, preferred, minimum);
+        for (const [index, property] of ["--label-column", "--value-column", "--bar-column"].entries()) {
+          table.style.setProperty(property, `${widths[index]}px`);
+        }
+      } catch (error) {
+        showError(error);
+      } finally {
+        for (const { probe } of probes) probe.remove();
+      }
+      const paths = footprintRows.filter(({ row, name }) => !row.hidden && name).map(({ name }) => ({
+        name, truncated: String([...name.children].reduce((sum, part) =>
+          sum + part.firstElementChild.getBoundingClientRect().width, 0) > name.clientWidth + 0.5),
+      }));
+      for (const { name, truncated } of paths) name.dataset.truncated = truncated;
+    }
+    function scheduleLayout() {
+      if (layoutPending) return;
+      layoutPending = true;
+      requestAnimationFrame(() => { layoutPending = false; layoutFootprint(); });
+    }
+    const tableObserver = new ResizeObserver(scheduleLayout);
+    tableObserver.observe(table);
     const definitions = new Map([["lines", { id: "lines", label: "Added / deleted text lines",
       tier: "Language-independent", unit: "lines", mode: "churn",
       description: "Added/deleted physical text lines, including blanks and comments. Binary bytes are separate." }]]);
@@ -229,6 +329,7 @@
         [metricValue(metrics), isLines() ? "text lines" : metric().label, ""],
         [summary, summaryLabel, "muted"],
       ]) {
+        if (title === "binary files" && metrics.binaryFiles === 0) continue;
         const stat = el("div", undefined, "stat");
         const valueNode = el("span", undefined, `num ${className}${title === "measurement coverage" ? " coverage" : ""}`);
         if (typeof value === "string") valueNode.textContent = value;
@@ -243,29 +344,42 @@
       row.dataset.category = file.category;
       row.hidden = true;
       const details = el("details");
-      const summary = el("summary");
-      summary.append(el("code", file.path, "file-name"), el("span", file.status, "file-meta"));
+      const summary = el("summary", undefined, "file-summary");
+      summary.setAttribute("aria-label", `${file.path} (${file.status})`);
+      summary.title = file.path;
+      const name = el("code", undefined, "file-name");
+      const characters = Array.from(pathSegments.segment(file.path), ({ segment }) => segment);
+      const middle = Math.ceil(characters.length / 2);
+      const prefix = el("span", undefined, "path-prefix");
+      prefix.append(el("span", characters.slice(0, middle).join("")));
+      const suffix = el("span", undefined, "path-suffix");
+      const end = el("span", characters.slice(middle).join(""));
+      end.setAttribute("dir", "ltr");
+      suffix.append(end);
+      name.append(prefix, suffix);
+      summary.append(name);
       details.append(summary);
-      if (file.previousPath) details.append(el("p", `Previous path: ${file.previousPath}`));
-      let diffRow;
+      const diffRow = el("tr", undefined, "diff-row");
+      diffRow.hidden = true;
+      diffRow.dataset.filePath = file.path;
+      const diffCell = el("td");
+      diffCell.colSpan = showsBars() ? 3 : 2;
+      const tools = el("div", undefined, "diff-tools");
+      diffCell.append(tools);
+      diffRow.append(diffCell);
       if (url) {
         const diffLink = el("a", "Open diff ↗", "file-diff");
         diffLink.href = url;
         diffLink.target = "_blank";
         diffLink.rel = "noreferrer noopener";
-        details.append(diffLink);
+        tools.append(diffLink);
       }
-      if (file.diff || selected().source.kind === "local") {
-        diffRow = el("tr", undefined, "diff-row");
-        diffRow.hidden = true;
-        diffRow.dataset.filePath = file.path;
-        const diffCell = el("td");
-        diffCell.colSpan = showsBars() ? 3 : 2;
-        diffRow.append(diffCell);
-        loadLocalDiff(details, file, diffScope, diffCell, diffRow, isCategoryExpanded);
-      } else if (!url) {
-        details.append(el("p", "Diff not included in this report.", "muted"));
+      const localScope = selected().source.kind === "local" ? diffScope : null;
+      if (!file.diff && !localScope) {
+        filePaths(diffCell, file);
+        diffCell.append(el("p", file.binary ? "Binary file; no text diff." : "Diff not included in this report.", "muted"));
       }
+      loadLocalDiff(details, file, localScope, diffCell, diffRow, tools, isCategoryExpanded);
       const pathCell = el("td");
       pathCell.append(details);
       const metricCell = el("td");
@@ -279,6 +393,7 @@
         metricCell.append(delta(file));
       }
       row.append(pathCell, metricCell, ...(barCell ? [barCell] : []));
+      footprintRows.push({ row, name, cells: [pathCell, metricCell, ...(barCell ? [barCell] : [])] });
       return { row, diffRow, details };
     }
     function originalCommits(report) {
@@ -302,6 +417,8 @@
     }
     const expandedRoles = new Set();
     function render(preserveRoles = false) {
+      diffViews.clear();
+      footprintRows = [{ row: $("footprint-header"), cells: [$("label-heading"), $("value-heading"), $("bar-heading")] }];
       if (preserveRoles !== true) expandedRoles.clear();
       const report = selected(), current = scope(), metrics = current.metrics;
       $("overview").dataset.metricMode = metric().mode;
@@ -356,6 +473,7 @@
           metricCell.append(delta(metric));
         }
         categoryRow.append(nameCell, metricCell, ...(barCell ? [barCell] : []));
+        footprintRows.push({ row: categoryRow, cells: [nameCell, metricCell, ...(barCell ? [barCell] : [])] });
         const fileRows = files
           .map(({ file, fileIndex }) => {
             const diffScope = current.fileScopes?.[fileIndex] ?? current.key;
@@ -373,6 +491,7 @@
             row.hidden = !expanded;
             if (diffRow) diffRow.hidden = !expanded || !details.open;
           }
+          scheduleLayout();
         });
         $("category-rows").append(categoryRow, ...fileRows.flatMap(({ row, diffRow }) =>
           diffRow ? [row, diffRow] : [row]));
@@ -381,6 +500,7 @@
       $("role-empty").textContent = !metrics.files ? "No files changed in this scope." :
         inapplicableMetric(metrics) ? "This metric does not apply to files in this scope." : "No changes for this metric.";
       originalCommits(report);
+      scheduleLayout();
     }
     function selectScope(key) {
       $("scope").value = key;
@@ -459,8 +579,6 @@
     $("shape").addEventListener("change", desk);
     load(); desk();
   } catch (error) {
-    $("error").textContent = `Unable to render report: ${error.message}`;
-    $("error").hidden = false;
-    $("overview").hidden = true;
+    showError(error);
   }
 })();

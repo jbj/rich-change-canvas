@@ -48,9 +48,9 @@
       <section class="panel footprint" aria-labelledby="footprint-heading">
         <h2 id="footprint-heading">Footprint <span id="metric-heading" class="muted">/ text lines</span></h2>
         <p id="metric-note" class="muted"></p>
-        <table class="footprint-table">
-          <thead><tr><th>Role · files</th><th id="value-heading">+added / −deleted</th><th id="bar-heading" hidden>Snapshots</th></tr></thead>
-          <tbody id="category-rows"></tbody>
+        <table id="footprint-table" class="footprint-table" role="table">
+          <thead role="rowgroup"><tr id="footprint-header" role="row"><th role="columnheader" id="label-heading">Role · files</th><th role="columnheader" id="value-heading">+added / −deleted</th><th role="columnheader" id="bar-heading" hidden>Snapshots</th></tr></thead>
+          <tbody id="category-rows" role="rowgroup"></tbody>
         </table>
         <p id="role-empty" class="muted" hidden>No changed files.</p>
         <p id="metric-legend" class="legend"><span id="legend-before" class="added">+ added</span> <span id="legend-after" class="deleted">− deleted</span> <span id="line-scale" class="muted"></span></p>

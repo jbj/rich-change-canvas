@@ -2,11 +2,11 @@
 import { parseArgs } from "node:util";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve, join, relative, sep, isAbsolute } from "node:path";
-import { analyzeLocal } from "./src/local.mjs";
+import { analyzeLocal, getLocalFileDiff } from "./src/local.mjs";
 import { analyzePullRequest } from "./src/github.mjs";
-import { saveReport, loadReport } from "./src/report.mjs";
+import { saveReport, loadReport, createReport } from "./src/report.mjs";
 import { renderReports } from "./src/render.mjs";
-import { reportsFromCorpus } from "./src/corpus.mjs";
+import { acquireCorpus } from "./src/corpus.mjs";
 
 const help = `Usage:
   node cli.mjs local --base <ref> --out <artifact-directory> [--cwd <repo>] [--working]
@@ -17,7 +17,9 @@ const help = `Usage:
 Reports are read-only snapshots. Output includes immutable JSON and review.html.
 Local analysis never switches branches, stashes, commits, or executes repository code.
 --working adds separate staged, unstaged, and untracked snapshots.
-corpus renders retained study samples offline through the same review dashboard.
+GitHub acquisition requires authenticated gh on cache misses.
+API responses are cached under ~/.cache/rich-change-canvas; cached runs need no requests.
+corpus computes all metrics at retained study revisions and embeds diffs for offline review.
 `;
 
 try {
@@ -48,10 +50,10 @@ try {
     const output = resolve(values.out);
     let reports;
     if (command === "local") reports = [analyzeLocal({ cwd: values.cwd, base: values.base, includeWorking: values.working })];
-    if (command === "pr") reports = [analyzePullRequest({ repository: values.repository, number: Number(values.number) })];
+    if (command === "pr") reports = [await analyzePullRequest({ repository: values.repository, number: Number(values.number) })];
     if (command === "corpus") {
       if (values.input?.length !== 1) throw new Error("corpus requires exactly one --input corpus.json");
-      reports = reportsFromCorpus(JSON.parse(await readFile(resolve(values.input[0]), "utf8")));
+      reports = await acquireCorpus(JSON.parse(await readFile(resolve(values.input[0]), "utf8")));
     }
     if (command === "view") {
       if (!values.input?.length) throw new Error("view requires at least one --input report.json");
@@ -67,6 +69,19 @@ try {
       const location = relative(reports[0].source.repository, output);
       if (!location || (location !== ".." && !location.startsWith(`..${sep}`) && !isAbsolute(location))) {
         throw new Error("--out must be outside the analyzed repository to avoid polluting future snapshots");
+      }
+      const report = reports[0];
+      const files = (records, scope) => records.map((file) => ({
+        ...file, diff: getLocalFileDiff({ cwd: report.source.repository, report, scope, path: file.path,
+          maxOutputBytes: 128 * 1024 * 1024 }),
+      }));
+      reports = [createReport({
+        ...report, files: files(report.metrics.fileMetrics, "whole"),
+        commits: report.commits.map((commit, index) => ({ ...commit, files: files(commit.files, `commit:${index}`) })),
+        layers: report.layers.map((layer) => ({ ...layer, files: files(layer.metrics.fileMetrics, layer.id) })),
+      })];
+      if (analyzeLocal({ cwd: values.cwd, base: values.base, includeWorking: values.working }).id !== report.id) {
+        throw new Error("Local content changed while embedding diffs; rerun for a consistent snapshot");
       }
     }
     await mkdir(output, { recursive: true });

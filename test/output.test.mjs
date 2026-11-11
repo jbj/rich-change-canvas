@@ -802,11 +802,12 @@ test("CLI generates immutable reports and reopens multiple persisted inputs", as
   assert.throws(() => run("node", [cli, "local", "--base", "HEAD"]), /--out is required/);
 });
 
-test("Corpus CLI creates an offline gallery reusable by view, with navigable real PR scopes", async (t) => {
+test("Retained corpus reports remain viewable offline with navigable real PR scopes", async (t) => {
   const output = temporary(t);
   const corpusPath = resolve("research/corpus.json");
   const reports = reportsFromCorpus(JSON.parse(readFileSync(corpusPath, "utf8")));
-  run("node", [cli, "corpus", "--input", corpusPath, "--out", output]);
+  await Promise.all(reports.map((report) => saveReport(output, report)));
+  run("node", [cli, "view", ...reports.flatMap((report) => ["--input", join(output, `${report.id}.json`)]), "--out", output]);
   const html = readFileSync(join(output, "review.html"), "utf8");
   const embedded = JSON.parse(html.match(/<script id="report-data"[^>]*>([\s\S]*?)<\/script>/)[1]);
   assert.deepEqual(embedded, reports);
@@ -872,4 +873,30 @@ test("Corpus CLI creates an offline gallery reusable by view, with navigable rea
   }
   assert.throws(() => run("node", [cli, "corpus", "--input", corpusPath, "--working", "--out", output]), /not valid for corpus/);
   assert.throws(() => run("node", [cli, "view", "--input", corpusPath, "--out", output]), /immutable/);
+});
+
+test("Embedded diffs render without requests in GitHub and original-commit scopes", async () => {
+  const file = {
+    path: "value.js", status: "modified", additions: 1, deletions: 1, patchState: "complete",
+    diff: { binary: false, diff: "@@ -1 +1 @@\n-old\n+new\n</script>" },
+  };
+  const report = createReport({
+    source: { kind: "github", repository: "test/repo", url: "https://github.com/test/repo/pull/1" },
+    title: "Inline diff", comparison: {}, files: [file],
+    commits: [{ sha: "head", parentSha: "base", parentCount: 1, subject: "Change",
+      url: "https://github.com/test/repo/commit/head", files: [{ ...file,
+        diff: { binary: false, diff: "@@ -1 +1 @@\n-commit old\n+commit new" } }] }],
+  });
+  const page = reviewPage(report);
+  for (const [scope, expected] of [["whole", "-old"], ["commit:0", "-commit old"]]) {
+    page.scope.value = scope;
+    page.scope.events.change();
+    categoryToggle(page, "source").events.click();
+    const details = fileRow(page, "value.js").children[0].children[0];
+    details.open = true;
+    details.events.toggle();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.match(diffRow(page, "value.js").textContent, new RegExp(expected));
+  }
+  assert.deepEqual(page.fetchRequests, []);
 });

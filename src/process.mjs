@@ -1,5 +1,20 @@
 import { execFileSync } from "node:child_process";
 
+export function createLimiter(concurrency) {
+  let active = 0;
+  const waiting = [];
+  return async (task) => {
+    if (active >= concurrency) await new Promise((resolve) => waiting.push(resolve));
+    else active++;
+    try {
+      return await task();
+    } finally {
+      if (waiting.length) waiting.shift()();
+      else active--;
+    }
+  };
+}
+
 export function run(command, args, { cwd, encoding = "utf8", input, maxBuffer = 128 * 1024 * 1024,
   allowedExitCodes = [0] } = {}) {
   try {

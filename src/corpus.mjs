@@ -1,4 +1,29 @@
 import { createReport } from "./report.mjs";
+import { createGithubCache } from "./github-cache.mjs";
+import { createGithubFiles } from "./github-files.mjs";
+
+export async function acquireCorpus(corpus, { api = createGithubCache() } = {}) {
+  const retained = reportsFromCorpus(corpus);
+  return Promise.all(retained.map(async (report, index) => {
+    const sample = corpus.samples[index];
+    const collect = createGithubFiles({ repository: sample.repository, api });
+    const [files, commits] = await Promise.all([
+      collect(sample.files, sample.mergeBaseSha, sample.headSha),
+      Promise.all(sample.commits.map(async (commit) => ({
+        ...commit, files: await collect(commit.files, commit.parentSha, commit.sha),
+      }))),
+    ]);
+    return createReport({
+      source: report.source, title: report.title, comparison: report.comparison, files, commits,
+      warnings: [
+        `Retained study snapshot collected ${sample.collectedAt}; source and diffs acquired at the recorded immutable revisions.`,
+        `Convenience sample selection: ${corpus.selection}`,
+        "File roles are path heuristics. Test-line changes are not coverage or evidence of correctness.",
+        "Each commit is compared with its first parent; merge context can contain upstream changes absent from the final PR.",
+      ],
+    });
+  }));
+}
 
 export function reportsFromCorpus(corpus) {
   const require = (condition, message) => {

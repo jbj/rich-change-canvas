@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, renameSync, symlinkSync, chmodSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, renameSync, symlinkSync, chmodSync, existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { run } from "../src/process.mjs";
 import { analyzeLocal, getLocalFileDiff } from "../src/local.mjs";
 import { loadReport, saveReport } from "../src/report.mjs";
@@ -59,7 +59,7 @@ test("Commits, filenames with tabs, binary bytes and mutable layers stay distinc
   await assert.rejects(loadReport(artifacts, "../escape"), /Invalid report identity/);
 });
 
-test("Local file diffs match committed, staged, unstaged, and untracked scopes", (t) => {
+test("Local file diffs match committed, staged, unstaged, and untracked scopes", async (t) => {
   const f = fixture(t);
   mkdirSync(join(f.root, "src"));
   f.write("src/value.js", "value = 1\n");
@@ -88,6 +88,18 @@ test("Local file diffs match committed, staged, unstaged, and untracked scopes",
   assert.throws(() => getLocalFileDiff({
     cwd: tmpdir(), report, scope: "whole", path: "src/value.js",
   }), { statusCode: 409 });
+  const output = mkdtempSync(join(tmpdir(), "rich-local-cli-"));
+  t.after(() => rmSync(output, { recursive: true, force: true }));
+  run(process.execPath, [resolve("cli.mjs"), "local", "--cwd", f.root, "--base", base, "--working", "--out", output]);
+  const id = readdirSync(output).find((name) => name.endsWith(".json")).slice(0, -5);
+  const saved = await loadReport(output, id);
+  for (const [files, scope] of [
+    [saved.metrics.fileMetrics, "whole"],
+    [saved.commits[0].files, "commit:0"],
+    ...saved.layers.map((layer) => [layer.metrics.fileMetrics, layer.id]),
+  ]) {
+    for (const file of files) assert.deepEqual(file.diff, diff(scope, file.path));
+  }
 });
 
 test("Zero-line binary rename preserves byte sizes and rename identity", (t) => {

@@ -28,7 +28,7 @@ function fixture({ missing = false, changeHead = false, binaryRename = false } =
       stats: { additions: file.additions, deletions: file.deletions },
       commit: { message: "Merge context" }, html_url: "https://github.com/test/repo/commit/head" };
     if (path.includes("/contents/")) {
-      const bytes = binaryRename ? Buffer.from([0, 1, 2]) : Buffer.from("text\n");
+      const bytes = binaryRename ? Buffer.from([0, 1, 2]) : Buffer.from(path.endsWith("ref=head") ? "new\n" : "old\n");
       return { type: "file", size: bytes.length, encoding: "base64", content: bytes.toString("base64"), sha: "blob" };
     }
     throw new Error(`Unexpected API request: ${path}`);
@@ -36,9 +36,9 @@ function fixture({ missing = false, changeHead = false, binaryRename = false } =
   return { api, calls, pr, file };
 }
 
-test("PR and merge-commit comparisons retain exact scope and immutable identity", () => {
+test("PR and merge-commit comparisons retain exact scope and immutable identity", async () => {
   const f = fixture();
-  const report = analyzePullRequest({ repository: "test/repo", number: 1, api: f.api });
+  const report = await analyzePullRequest({ repository: "test/repo", number: 1, api: f.api });
   assert.equal(report.comparison.mergeBaseSha, "merge-base");
   assert.equal(report.metrics.churn, 2);
   assert.equal(report.commits[0].parentCount, 2);
@@ -47,59 +47,64 @@ test("PR and merge-commit comparisons retain exact scope and immutable identity"
   assert.equal(report.structuralAnalysis.status, "unavailable");
 });
 
-test("Missing text patch is not falsely marked complete after fetching bytes", () => {
+test("Missing text patches are reconstructed from exact snapshots", async () => {
   const f = fixture({ missing: true });
-  const report = analyzePullRequest({ repository: "test/repo", number: 1, api: f.api });
-  assert.equal(report.metrics.incomplete, 1);
-  assert.equal(report.metrics.fileMetrics[0].beforeBytes, 5);
-  assert.equal(report.commits[0].metrics.incomplete, 1);
+  const report = await analyzePullRequest({ repository: "test/repo", number: 1, api: f.api });
+  assert.equal(report.metrics.incomplete, 0);
+  assert.equal(report.metrics.fileMetrics[0].beforeBytes, 4);
+  assert.match(report.metrics.fileMetrics[0].diff.diff, /-old\n\+new/);
+  assert.equal(report.commits[0].metrics.incomplete, 0);
+  f.file.patch = "@@ -1 +1 @@\n-old";
+  const truncated = await analyzePullRequest({ repository: "test/repo", number: 1, api: f.api });
+  assert.equal(truncated.metrics.incomplete, 0);
+  assert.equal(truncated.metrics.fileMetrics[0].diff.diff, report.metrics.fileMetrics[0].diff.diff);
 });
 
-test("Zero-line binary rename fetches both paths and exposes bytes", () => {
+test("Zero-line binary rename fetches both paths and exposes bytes", async () => {
   const f = fixture({ binaryRename: true });
-  const report = analyzePullRequest({ repository: "test/repo", number: 1, api: f.api });
+  const report = await analyzePullRequest({ repository: "test/repo", number: 1, api: f.api });
   assert.equal(report.metrics.binaryFiles, 1);
   assert.equal(report.metrics.renames, 1);
   assert.equal(report.metrics.categories.binary.beforeBytes, 3);
   assert.equal(report.metrics.categories.binary.afterBytes, 3);
   assert.ok(f.calls.includes("repos/test/repo/contents/old.bin?ref=merge-base"));
   f.file.patch = "";
-  const emptyPatch = analyzePullRequest({ repository: "test/repo", number: 1, api: f.api });
+  const emptyPatch = await analyzePullRequest({ repository: "test/repo", number: 1, api: f.api });
   assert.equal(emptyPatch.metrics.binaryFiles, 1);
 });
 
-test("Blob API fallback checks exact bytes and acquisition budgets", () => {
-  const f = fixture({ missing: true });
+test("Blob API fallback checks exact bytes and acquisition budgets", async () => {
+  const f = fixture();
   const api = (path) => path.includes("/contents/") ? { type: "file", size: 5, encoding: "none", sha: "blob" } :
     path.endsWith("/git/blobs/blob") ? { encoding: "base64", content: Buffer.from("text\n").toString("base64") } : f.api(path);
-  const report = analyzePullRequest({ repository: "test/repo", number: 1, api });
+  const report = await analyzePullRequest({ repository: "test/repo", number: 1, api });
   assert.equal(report.metrics.fileMetrics[0].beforeBytes, 5);
-  assert.throws(() => analyzePullRequest({ repository: "test/repo", number: 1, api, maxBlobBytes: 4 }), /Blob size limit/);
+  await assert.rejects(() => analyzePullRequest({ repository: "test/repo", number: 1, api, maxBlobBytes: 4 }), /Blob size limit/);
   const truncated = (path) => path.endsWith("/git/blobs/blob") ?
     { encoding: "base64", content: "YQ==" } : api(path);
-  assert.throws(() => analyzePullRequest({ repository: "test/repo", number: 1, api: truncated }), /Incomplete blob bytes/);
+  await assert.rejects(() => analyzePullRequest({ repository: "test/repo", number: 1, api: truncated }), /Incomplete blob bytes/);
   const denied = () => { throw new Error("Permission denied"); };
-  assert.throws(() => analyzePullRequest({ repository: "test/repo", number: 1, api: denied }), /Permission denied/);
+  await assert.rejects(() => analyzePullRequest({ repository: "test/repo", number: 1, api: denied }), /Permission denied/);
 });
 
-test("Concurrent PR changes and metadata truncation fail explicitly", () => {
+test("Concurrent PR changes and metadata truncation fail explicitly", async () => {
   const f = fixture({ changeHead: true });
-  assert.throws(() => analyzePullRequest({ repository: "test/repo", number: 1, api: f.api }), /changed during/);
+  await assert.rejects(() => analyzePullRequest({ repository: "test/repo", number: 1, api: f.api }), /changed during/);
   const broken = fixture();
   broken.pr.changed_files = 2;
-  assert.throws(() => analyzePullRequest({ repository: "test/repo", number: 1, api: broken.api }), /Incomplete PR file/);
+  await assert.rejects(() => analyzePullRequest({ repository: "test/repo", number: 1, api: broken.api }), /Incomplete PR file/);
   const huge = fixture(); huge.pr.commits = 251;
-  assert.throws(() => analyzePullRequest({ repository: "test/repo", number: 1, api: huge.api }), /supported limit/);
+  await assert.rejects(() => analyzePullRequest({ repository: "test/repo", number: 1, api: huge.api }), /supported limit/);
 });
 
-test("Validation rejects unsafe repository and invalid number inputs", () => {
+test("Validation rejects unsafe repository and invalid number inputs", async () => {
   for (const repository of ["--help", "../repo", "owner/..", "https://github.com/a/b"]) {
-    assert.throws(() => analyzePullRequest({ repository, number: 1 }), /owner\/name/);
+    await assert.rejects(() => analyzePullRequest({ repository, number: 1 }), /owner\/name/);
   }
-  assert.throws(() => analyzePullRequest({ repository: "test/repo", number: 0 }), /positive integer/);
+  await assert.rejects(() => analyzePullRequest({ repository: "test/repo", number: 0 }), /positive integer/);
 });
 
-test("Complete patches fetch full snapshots by default and reuse scalar measurements across scopes", () => {
+test("Complete patches fetch full snapshots by default and reuse scalar measurements across scopes", async () => {
   const f = fixture();
   const before = "# private_source_sentinel\nvalue = 1\n";
   const after = "# private_source_sentinel\nif value:\n    pass\n";
@@ -111,7 +116,7 @@ test("Complete patches fetch full snapshots by default and reuse scalar measurem
       content: Buffer.from(text).toString("base64"), sha: "blob" };
   };
   f.file.filename = "main.py";
-  const report = analyzePullRequest({ repository: "test/repo", number: 1, api });
+  const report = await analyzePullRequest({ repository: "test/repo", number: 1, api });
   assert.equal(f.calls.filter((path) => path.includes("/contents/")).length, 3);
   assert.equal(f.calls.filter((path) => path.endsWith("/contents/main.py?ref=head")).length, 1);
   assert.equal(report.metrics.alternativeMetrics["decision-keywords"].before.value, 0);
@@ -119,10 +124,10 @@ test("Complete patches fetch full snapshots by default and reuse scalar measurem
   assert.equal(report.metrics.alternativeMetrics.bytes.after.value, Buffer.byteLength(after));
   assert.equal(report.metrics.incomplete, 0);
   assert.doesNotMatch(JSON.stringify(report), /private_source_sentinel/);
-  assert.throws(() => analyzePullRequest({ repository: "test/repo", number: 1, api, maxBlobBytes: 2 }), /Blob size limit/);
+  await assert.rejects(() => analyzePullRequest({ repository: "test/repo", number: 1, api, maxBlobBytes: 2 }), /Blob size limit/);
 });
 
-test("GitHub metrics use changed patch lines rather than net snapshot count differences", () => {
+test("GitHub metrics use changed patch lines rather than net snapshot count differences", async () => {
   const f = fixture();
   const untouched = "u".repeat(121), removed = "x".repeat(121);
   const added = Array.from({ length: 7 }, (_, index) => `${index}${"y".repeat(120)}`);
@@ -135,7 +140,7 @@ test("GitHub metrics use changed patch lines rather than net snapshot count diff
     return { type: "file", size: Buffer.byteLength(text), encoding: "base64",
       content: Buffer.from(text).toString("base64"), sha: "blob" };
   };
-  const report = analyzePullRequest({ repository: "test/repo", number: 1, api });
+  const report = await analyzePullRequest({ repository: "test/repo", number: 1, api });
   const long = report.metrics.alternativeMetrics["long-lines"];
   assert.equal(long.before.value, 2);
   assert.equal(long.after.value, 8);
@@ -143,20 +148,22 @@ test("GitHub metrics use changed patch lines rather than net snapshot count diff
   assert.equal(long.changes.deletions.value, 1);
   assert.deepEqual(report.commits[0].metrics.alternativeMetrics["long-lines"], long);
   delete f.file.patch;
-  const missing = analyzePullRequest({ repository: "test/repo", number: 1, api }).metrics.alternativeMetrics["long-lines"];
+  const missing = (await analyzePullRequest({ repository: "test/repo", number: 1, api })).metrics.alternativeMetrics["long-lines"];
   assert.equal(missing.before.value, 2);
   assert.equal(missing.after.value, 8);
-  assert.equal(missing.changes.additions.status, "missing-content");
-  assert.equal(missing.changes.deletions.value, null);
+  assert.equal(missing.changes.additions.status, "available");
+  assert.equal(missing.changes.additions.value, 7);
+  assert.equal(missing.changes.deletions.value, 1);
 });
 
-test("All 30 acquired PRs replay through the production adapter using their metadata", () => {
+test("All 30 acquired PRs replay through the production adapter using their metadata", async () => {
   const corpus = JSON.parse(readFileSync(new URL("../research/corpus.json", import.meta.url), "utf8"));
   for (const sample of corpus.samples) {
-    // The compact corpus intentionally omits patches: this replay tests pagination,
-    // totals and scope preservation, not the original text's binary classification.
+    // Synthetic complete hunks test pagination and scopes, not original source content.
     const raw = (file) => ({ filename: file.path, previous_filename: file.previousPath,
-      status: file.status, additions: file.additions, deletions: file.deletions });
+      status: file.status, additions: file.additions, deletions: file.deletions,
+      patch: `@@ -1,${file.deletions} +1,${file.additions} @@\n` +
+        "-a\n".repeat(file.deletions) + "+b\n".repeat(file.additions) });
     const prefix = `repos/${sample.repository}`;
     const paginate = (records, path) => {
       const page = Number(new URL(`https://api.github.com/${path}`).searchParams.get("page"));
@@ -181,7 +188,7 @@ test("All 30 acquired PRs replay through the production adapter using their meta
         commit: { message: commit.subject }, html_url: commit.url };
       throw new Error(`Unexpected replay API request: ${path}`);
     };
-    const report = analyzePullRequest({ repository: sample.repository, number: sample.number, api });
+    const report = await analyzePullRequest({ repository: sample.repository, number: sample.number, api });
     assert.equal(report.metrics.files, sample.files.length, sample.repository);
     assert.equal(report.metrics.additions, sample.additions, sample.repository);
     assert.equal(report.commits.length, sample.commits.length, sample.repository);

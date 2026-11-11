@@ -30,26 +30,37 @@ open /tmp/review-desk/review.html
 
 Choose an output directory **outside the analyzed repository**. Each acquisition
 writes a versioned, SHA-256-identified JSON report and a self-contained
-`review.html`. Reports contain filenames, counts, commit subjects and revision
-identifiers, not copied source or patches. Local reports also contain the
+`review.html`. New CLI reports include inline text diffs as well as filenames,
+counts, commit subjects and revision identifiers. Local reports also contain the
 repository's absolute path. Treat reports from private repositories as private.
 Saved content identity is verified when saving and reopening; it detects
 accidental edits, not the authenticity of the producer.
 
 New reports also retain scalar before/after metric evidence. GitHub acquisition
-now fetches full blobs by default, even for complete text patches, so it makes
-more API requests than the original diffstat-only analyzer. Measurements are
-reused by revision/path across scopes; source bytes are discarded after
-measurement, not cached in reports. Both sides of every existing file version
+fetches full blobs, even for complete text patches. Source reads are batched
+through GraphQL to avoid one REST request per file version, with REST blob
+fallback for binary/truncated content. Up to eight authenticated source reads
+run concurrently (batched together where possible). Responses, including source bytes, are
+cached under `~/.cache/rich-change-canvas/github-v1` with owner-only permissions.
+An identical subsequent acquisition uses the cache without GitHub requests or
+an authentication check. Authentication is checked before the first cache miss;
+use `gh auth login` if needed. The cache has no automatic expiry: PR commands
+replay the cached acquisition rather than refreshing mutable metadata. Remove
+that cache directory explicitly to reacquire current PR data. Keep private
+repository caches, reports, and HTML private.
+
+Measurements are reused by revision/path across scopes; full source snapshots
+are not embedded in reports, but changed/context lines are. Both sides of every existing file version
 must be accessible; acquisition errors remain explicit rather than producing
 incomplete success-shaped results.
 
 The **change review dashboard** puts scope controls, coloured line deltas,
 numeric role summaries, and collapsible commits on one compact screen, without tabs.
 Expand a role to see its file list in the same diffstat columns; expand a file
-to load its local diff on demand or open its GitHub diff when available. The
-live canvas displays local diffs up to 256 KiB; saved reports do not embed patch
-text. Expand Original commits to select a commit and update the same overview;
+to display its diff inline, with a GitHub link when available. The live canvas
+loads local diffs on demand up to 256 KiB; CLI reports embed diffs for committed,
+original-commit, and requested working scopes so they work offline.
+Expand Original commits to select a commit and update the same overview;
 scope selectors keep that overview in place. Report comparison and search/shape
 filters are available in an expandable section when there are multiple reports
 or non-empty local layers.
@@ -62,7 +73,10 @@ panels.
 Staged, unstaged, and untracked layers are independent snapshots,
 not part of the committed footprint. A merge's first-parent view is explicitly
 labeled merge context. Binary changes use before/after bytes, including renames;
-missing text patches remain marked incomplete. A zero-line rename still counts
+missing or truncated GitHub patches are reconstructed from exact before/after
+blobs and checked against recorded line totals. Acquisition fails if they
+cannot be reconciled. Older reports can still show incomplete patches.
+A zero-line rename still counts
 as a changed file.
 
 Acquisition fails explicitly on stale inputs, unsupported non-file entries,
@@ -148,8 +162,9 @@ Coverage reports measured/eligible files independently for additions/removals
 or before/after snapshots, as appropriate.
 Unsupported languages and binary text snapshots are excluded; missing source
 is unavailable, not zero. Partial aggregates are marked **partial**. Older
-saved reports and the retained corpus cannot recover content-based metrics
-offline: reacquire the changes for those measurements. Previously saved share
+saved reports cannot recover content-based metrics offline: reacquire the
+changes for those measurements. The corpus command acquires the retained
+revisions automatically, then replays them from cache. Previously saved share
 metrics migrate to absolute whole-file counts using their retained numerators.
 Those counts do **not** reconstruct added/removed lines. When complete changed
 patch lines are unavailable, the UI shows unavailable diffstat evidence and any
@@ -200,7 +215,7 @@ numerators to absolute counts without claiming new changed-line evidence.
 
 `changePlugins` handles absolute counts already present in change metadata.
 The pure unified-diff parser also lives in `src/metric-plugins/`; adapters supply
-patch text temporarily and only numeric measurements enter reports. The separate
+patch text for measurement; numeric evidence and inline diffs are stored separately. The separate
 `src/regex-metrics/` provider uses the same snapshot protocol but owns its
 language rules. `src/metric-analysis.mjs` binds providers, availability,
 aggregation and serializable metadata; acquisition and the UI do not contain
@@ -273,7 +288,7 @@ See [AGENTS.md](AGENTS.md) for the agent verification procedure.
 
 ### Browse all 30 sample PRs
 
-Generate a standalone, offline gallery using the **same dashboard as the review
+Generate a self-contained gallery using the **same dashboard as the review
 canvas**, not the retired research preview:
 
 ```sh
@@ -281,9 +296,13 @@ node cli.mjs corpus --input research/corpus.json --out /tmp/sample-gallery
 open /tmp/sample-gallery/review.html
 ```
 
-No GitHub authentication, network access, or sampled repository checkout is
-needed. The self-contained HTML includes all 30 PRs and their 61 original
-commits. The output also includes immutable report JSON files that can be
+The first run requires authenticated `gh` and network access to acquire source
+at the corpus's recorded immutable revisions. No sampled repository checkout
+is needed, and no sampled code is executed. All implemented snapshot and
+changed-line metrics are computed for all 30 PRs and their 61 original commits;
+unsupported language/metric combinations remain explicitly inapplicable.
+Diffs are embedded, including patches omitted by GitHub. Subsequent runs reuse
+the persistent cache without requests. The output includes immutable report JSON files that can be
 reopened with `node cli.mjs view --input <report-id>.json --out <directory>`.
 
 Use **Report** to switch PRs, or expand **Compare reports** to search by
@@ -300,9 +319,9 @@ For a quick tour, try these repositories:
 | `angular/angular` | A deletion-heavy source change |
 | `elastic/elasticsearch` | 14 final changed lines versus 25,093 lines in an upstream merge context |
 
-These are retained collection-time snapshots, not fresh GitHub acquisitions.
-Patch completeness and lexical evidence come from the original collection;
-source and patches are not embedded or reverified on import. Human approval
+These retain the collection-time comparisons and review evidence, not today's
+PR heads. Source bytes are fetched or loaded from cache at those exact revisions,
+and reconstructed diffs must reconcile with the retained line counts. Human approval
 evidence is identified separately from raw bot-inclusive comment totals. The
 corpus is a convenience sample with no binary changes, not a demonstration of
 every possible PR shape or evidence of correctness, coverage, or review quality.

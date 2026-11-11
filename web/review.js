@@ -67,12 +67,12 @@
       output.setAttribute("aria-label", `Diff for ${file.path}`);
       diffCell.append(output);
       const query = `scope=${encodeURIComponent(scopeKey)}&path=${encodeURIComponent(file.path)}`;
-      fetch(`/diff?${query}`)
+      (file.diff ? Promise.resolve(file.diff) : fetch(`/diff?${query}`)
         .then(async (response) => {
           const result = await response.json();
           if (!response.ok) throw new Error(result.error ?? `Diff request failed (${response.status})`);
           return result;
-        })
+        }))
         .then((result) => {
           if (result.tooLarge) output.textContent = "Diff is too large to display here.";
           else if (result.binary) output.textContent = "Binary file; no text diff.";
@@ -254,7 +254,8 @@
         diffLink.target = "_blank";
         diffLink.rel = "noreferrer noopener";
         details.append(diffLink);
-      } else if (selected().source.kind === "local") {
+      }
+      if (file.diff || selected().source.kind === "local") {
         diffRow = el("tr", undefined, "diff-row");
         diffRow.hidden = true;
         diffRow.dataset.filePath = file.path;
@@ -262,7 +263,7 @@
         diffCell.colSpan = showsBars() ? 3 : 2;
         diffRow.append(diffCell);
         loadLocalDiff(details, file, diffScope, diffCell, diffRow, isCategoryExpanded);
-      } else {
+      } else if (!url) {
         details.append(el("p", "Diff not included in this report.", "muted"));
       }
       const pathCell = el("td");

@@ -2,11 +2,8 @@
 import { parseArgs } from "node:util";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve, join, relative, sep, isAbsolute } from "node:path";
-import { analyzeLocal, getLocalFileDiff } from "./src/local.mjs";
-import { analyzePullRequest } from "./src/github.mjs";
 import { saveReport, loadReport, createReport } from "./src/report.mjs";
 import { renderReports } from "./src/render.mjs";
-import { acquireCorpus } from "./src/corpus.mjs";
 
 const help = `Usage:
   node cli.mjs local --base <ref> --out <artifact-directory> [--cwd <repo>] [--working]
@@ -48,11 +45,18 @@ try {
       if (value !== false && !allowed.has(key)) throw new Error(`--${key} is not valid for ${command}`);
     }
     const output = resolve(values.out);
-    let reports;
-    if (command === "local") reports = [analyzeLocal({ cwd: values.cwd, base: values.base, includeWorking: values.working })];
-    if (command === "pr") reports = [await analyzePullRequest({ repository: values.repository, number: Number(values.number) })];
+    let reports, localAnalysis;
+    if (command === "local") {
+      localAnalysis = await import("./src/local.mjs");
+      reports = [localAnalysis.analyzeLocal({ cwd: values.cwd, base: values.base, includeWorking: values.working })];
+    }
+    if (command === "pr") {
+      const { analyzePullRequest } = await import("./src/github.mjs");
+      reports = [await analyzePullRequest({ repository: values.repository, number: Number(values.number) })];
+    }
     if (command === "corpus") {
       if (values.input?.length !== 1) throw new Error("corpus requires exactly one --input corpus.json");
+      const { acquireCorpus } = await import("./src/corpus.mjs");
       reports = await acquireCorpus(JSON.parse(await readFile(resolve(values.input[0]), "utf8")));
     }
     if (command === "view") {
@@ -66,6 +70,7 @@ try {
       }));
     }
     if (command === "local") {
+      const { analyzeLocal, getLocalFileDiff } = localAnalysis;
       const location = relative(reports[0].source.repository, output);
       if (!location || (location !== ".." && !location.startsWith(`..${sep}`) && !isAbsolute(location))) {
         throw new Error("--out must be outside the analyzed repository to avoid polluting future snapshots");

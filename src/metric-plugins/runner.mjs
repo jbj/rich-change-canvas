@@ -15,7 +15,7 @@ export function validatePlugins(plugins) {
 
 export function unavailable(status, reason) {
   return { status, value: null, numerator: 0, denominator: 0,
-    eligible: status === "missing-content" ? 1 : 0, measured: 0, reasons: [reason] };
+    eligible: ["missing-content", "parse-error", "resource-limit"].includes(status) ? 1 : 0, measured: 0, reasons: [reason] };
 }
 
 function valueFor(plugin, numerator, denominator) {

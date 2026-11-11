@@ -3,7 +3,7 @@ import { createGithubCache } from "./github-cache.mjs";
 import { createGithubFiles } from "./github-files.mjs";
 
 export async function analyzePullRequest({ repository, number, maxCommits = 250,
-  maxBlobBytes = 16 * 1024 * 1024, api = createGithubCache() } = {}) {
+  maxBlobBytes = 16 * 1024 * 1024, api = createGithubCache(), syntaxAnalyzer } = {}) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository ?? "") ||
       repository.split("/").some((part) => part === "." || part === "..")) {
     throw new Error("Repository must be owner/name");
@@ -40,7 +40,7 @@ export async function analyzePullRequest({ repository, number, maxCommits = 250,
   if (rawFiles.length !== pr.changed_files) throw new Error("Incomplete PR file list");
   reconcile(rawFiles, pr.additions, pr.deletions, "PR");
   if (rawCommits.length !== pr.commits) throw new Error("Incomplete PR commit history");
-  const files = createGithubFiles({ repository, api, maxBlobBytes });
+  const files = createGithubFiles({ repository, api, maxBlobBytes, syntaxAnalyzer });
   const [wholeFiles, commits] = await Promise.all([
     files(rawFiles, mergeBaseSha, pr.head.sha),
     Promise.all(rawCommits.map(async (entry) => {

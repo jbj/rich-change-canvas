@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { binary, createLimiter } from "./process.mjs";
 import { analyzeChangedLines, analyzeSnapshot, compareSnapshots } from "./metric-analysis.mjs";
 import { changedLines } from "./metric-plugins/diff-lines.mjs";
+import { createSyntaxAnalyzer } from "./syntax/analyzer.mjs";
 
 const execute = promisify(execFile);
 const measureFile = createLimiter(8);
@@ -34,7 +35,8 @@ async function reconstructPatch(before, after, path, previousPath) {
   }
 }
 
-export function createGithubFiles({ repository, api, maxBlobBytes = 16 * 1024 * 1024 }) {
+export function createGithubFiles({ repository, api, maxBlobBytes = 16 * 1024 * 1024,
+  syntaxAnalyzer = createSyntaxAnalyzer() }) {
   const prefix = `repos/${repository}`;
   const blobs = new Map();
   function blob(path, revision) {
@@ -54,7 +56,8 @@ export function createGithubFiles({ repository, api, maxBlobBytes = 16 * 1024 * 
         bytes = Buffer.from(object.content, "base64");
       }
       if (bytes.length !== content.size) throw new Error(`Incomplete blob bytes: ${path}`);
-      return { bytes, binary: binary(bytes), metrics: analyzeSnapshot(bytes, path) };
+      const syntax = syntaxAnalyzer(bytes, path);
+      return { bytes, binary: binary(bytes), syntax, metrics: analyzeSnapshot(bytes, path, { syntax }) };
     })());
     return blobs.get(key);
   }
@@ -87,15 +90,18 @@ export function createGithubFiles({ repository, api, maxBlobBytes = 16 * 1024 * 
           }
         }
       }
+      const beforeSyntax = before?.syntax ?? syntaxAnalyzer(null, previousPath ?? path);
+      const afterSyntax = after?.syntax ?? syntaxAnalyzer(null, path);
       return {
         path, previousPath, status: file.status,
         additions: isBinary ? 0 : file.additions, deletions: isBinary ? 0 : file.deletions,
         binary: isBinary, beforeBytes: before?.bytes.length ?? null, afterBytes: after?.bytes.length ?? null,
         patchState: isBinary ? "binary" : renameOnly ? "rename-only" : "complete",
         diff: { binary: isBinary, diff: isBinary ? "" : patch },
+        syntax: { before: beforeSyntax, after: afterSyntax },
         alternativeMetrics: compareSnapshots(
-          before?.metrics ?? analyzeSnapshot(null, previousPath ?? path),
-          after?.metrics ?? analyzeSnapshot(null, path),
+          before?.metrics ?? analyzeSnapshot(null, previousPath ?? path, { syntax: beforeSyntax }),
+          after?.metrics ?? analyzeSnapshot(null, path, { syntax: afterSyntax }),
           isBinary ? null : analyzeChangedLines(lines, previousPath ?? path, path)),
         addedRustTestAttributes: path.endsWith(".rs") ?
           lines?.after.filter((line) => /^\s*#\[(?:\w+::)*test(?:\]|\()/.test(line)).length ?? 0 : 0,

@@ -15,6 +15,17 @@ The standalone analyzer and browser UI work now, without a native extension.
 They require Node.js 22 or newer and Git. GitHub acquisition also requires
 authenticated `gh` with access to the target repository.
 
+Install pinned dependencies first (no native compilation or lifecycle scripts):
+
+```sh
+npm ci --ignore-scripts --omit=optional
+# In a configured CFS environment: gh cfs -- npm ci --ignore-scripts --omit=optional
+```
+
+The lockfile pins integrity hashes without registry-specific download URLs;
+installation uses the caller's configured registry. Runtime does not download
+grammars. Node.js source still runs directly, without a build.
+
 ```sh
 # Merge-base-to-HEAD, each original commit, and separate mutable local layers.
 node cli.mjs local --base HEAD~1 --working --out /tmp/change-reports
@@ -36,7 +47,9 @@ repository's absolute path. Treat reports from private repositories as private.
 Saved content identity is verified when saving and reopening; it detects
 accidental edits, not the authenticity of the producer.
 
-New reports also retain scalar before/after metric evidence. GitHub acquisition
+New reports retain before/after metric evidence and deduplicated source-anchored
+syntax trees for JavaScript/JSX, TypeScript/TSX, Python, Go, Rust, and Java.
+GitHub acquisition
 fetches full blobs, even for complete text patches. Source reads are batched
 through GraphQL to avoid one REST request per file version, with REST blob
 fallback for binary/truncated content. Up to eight authenticated source reads
@@ -49,8 +62,11 @@ replay the cached acquisition rather than refreshing mutable metadata. Remove
 that cache directory explicitly to reacquire current PR data. Keep private
 repository caches, reports, and HTML private.
 
-Measurements are reused by revision/path across scopes; full source snapshots
-are not embedded in reports, but changed/context lines are. Both sides of every existing file version
+Measurements are reused by revision/path across scopes. Parsed trees additionally
+reuse a private, content-addressed disk cache under
+`~/.cache/rich-change-canvas/syntax-v1` across local and GitHub acquisitions.
+Full source snapshots are not embedded in reports, but syntax identifiers,
+operators, node ranges, and changed/context lines are. Both sides of every existing file version
 must be accessible; acquisition errors remain explicit rather than producing
 incomplete success-shaped results.
 
@@ -103,8 +119,11 @@ missing blobs can prevent complete acquisition. Blob classification uses NUL
 bytes or failed strict UTF-8 decoding. No repository programs, filters, builds,
 or workflows are executed; Git external diffs and text conversion are disabled.
 
-The analyzer provides deterministic **file/snapshot and lexical evidence only**.
-Syntax/structural analysis is visibly unavailable, not zero. GitHub discussion totals in new
+The analyzer provides **file/snapshot, lexical, and syntactic evidence**, not
+semantic equivalence or test coverage. Cyclomatic complexity appears in the
+**Syntax** metric group; it sums per-function values for each before/after
+snapshot. A parse error makes that side unavailable, not zero. Unsupported
+file types and binary content are excluded. GitHub discussion totals in new
 reports include bots and do not claim verified human approvals; the curated
 study below has separate, stronger review-selection evidence.
 
@@ -237,16 +256,18 @@ language rules. `src/metric-analysis.mjs` binds providers, availability,
 aggregation and serializable metadata; acquisition and the UI do not contain
 metric-specific formulas.
 
-### Later: syntax-aware metrics
+### Syntax foundation
 
-A tree-sitter provider could add function/class counts, function sizes,
-syntactic nesting, changed declarations, parsed comment density, and
-per-function cyclomatic or ABC-style counts. It must parse full before/after
-files and define language-specific node rules, grammar support, parse-error
-handling and declaration matching. The shared result protocol can carry those
-results without putting language rules into independent plugins.
+Tree-sitter parses complete before/after snapshots, including original commits
+and each mutable local layer. Reports embed a deduplicated AST table retaining
+concrete grammar structure plus normalized function/decision tags. Source hashes,
+UTF-8 byte ranges, UTF-16 indices, and fields anchor queries to exact text.
+Per-function complexity evidence is retained alongside summed snapshot metrics.
+The tree-diff UI and cross-version declaration matching are not implemented.
 
-Tree-sitter is **not implemented yet**. Parsing alone cannot establish semantic
+See [the syntax contract and rules](docs/syntax.md) for query examples, exact
+language-specific complexity definitions, parser limits, cache invalidation,
+and distribution consequences. Parsing alone cannot establish semantic
 cohesion/coupling, execution time, defects, function points, or test coverage.
 Halstead and maintainability-index experiments also need agreed tokenization
 and formulas; they are not inferred from regex keyword counts.
@@ -272,7 +293,7 @@ For repositories without a remote, pass an explicit baseline when opening the
 canvas, for example `input: { "base": "main" }`. The project extension resolves
 the checkout from its own location, not the session's artifact directory.
 
-The canvas requires the Copilot App extension runtime and an authenticated
+The canvas requires installed analyzer dependencies, the Copilot App extension runtime and an authenticated
 `gh` installation when a usable `origin/HEAD` ref is not available.
 
 Run the analyzer, persistence, CLI, renderer, and corpus-replay tests:
@@ -285,8 +306,8 @@ GitHub Actions runs this suite on every push and pull request using Node.js 22.
 
 ### Retesting canvas changes
 
-There is no build or dependency-install step: the analyzer and dashboard run
-directly from source. The extension caches imported modules, and the renderer
+There is no build step: after dependency installation, the analyzer and dashboard
+run directly from source. The extension caches imported modules, and the renderer
 loads HTML, CSS, and JavaScript together for that module's lifetime. After
 editing extension code, `src/`, or `web/`, reload extensions, confirm the
 provider loaded, and reopen the canvas. A page refresh alone does not load

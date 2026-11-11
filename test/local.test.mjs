@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { run } from "../src/process.mjs";
 import { analyzeLocal, getLocalFileDiff } from "../src/local.mjs";
 import { loadReport, saveReport } from "../src/report.mjs";
+import { createSyntaxAnalyzer } from "../src/syntax/analyzer.mjs";
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "rich-summary-"));
@@ -226,10 +227,37 @@ test("Renames across language suffixes and removed files measure their own sides
   assert.equal(renamed.alternativeMetrics["comment-lines"].after.value, 0);
   assert.equal(renamed.alternativeMetrics["comment-lines"].changes.additions.value, 0);
   assert.equal(renamed.alternativeMetrics["comment-lines"].changes.deletions.value, 0);
+  assert.equal(report.syntaxSnapshots[renamed.syntax.before.id].dialect, "python");
+  assert.equal(report.syntaxSnapshots[renamed.syntax.after.id].dialect, "javascript");
+  assert.equal(renamed.alternativeMetrics["cyclomatic-complexity"].after.status, "parse-error");
   const removed = report.metrics.fileMetrics.find((file) => file.path === "removed.py");
   assert.equal(removed.alternativeMetrics["decision-keywords"].after.value, 0);
   assert.equal(removed.alternativeMetrics["blank-lines"].after.value, 0);
   assert.equal(removed.alternativeMetrics["decision-keywords"].changes.deletions.value, 1);
+});
+
+test("Syntax acquisition preserves full before/after functions across commits and every mutable layer", (t) => {
+  const f = fixture(t);
+  const source = (count) => `function f(x) { ${"if (x) return; ".repeat(count)} }\n`;
+  f.write("file.js", source(0));
+  const base = f.commit("base");
+  f.write("file.js", source(1)); f.commit("committed");
+  f.write("file.js", source(2)); f.git("add", "file.js");
+  f.write("file.js", source(3));
+  f.write("new.js", "const f = () => 1;\n");
+  let parses = 0;
+  const report = analyzeLocal({ cwd: f.root, base, includeWorking: true,
+    syntaxAnalyzer: createSyntaxAnalyzer({ directory: null, onParse: () => parses++ }) });
+  assert.equal(parses, 5);
+  assert.equal(Object.keys(report.syntaxSnapshots).length, 5);
+  const metric = (metrics) => metrics.alternativeMetrics["cyclomatic-complexity"];
+  assert.deepEqual([metric(report.metrics).before.value, metric(report.metrics).after.value], [1, 2]);
+  assert.deepEqual(report.layers.map((layer) => [metric(layer.metrics).before.value, metric(layer.metrics).after.value]),
+    [[2, 3], [3, 4], [0, 1]]);
+  assert.deepEqual([metric(report.allMetrics).before.value, metric(report.allMetrics).after.value], [6, 10]);
+  assert.deepEqual(report.commits[0].files[0].syntax, report.metrics.fileMetrics[0].syntax);
+  assert.equal(report.metrics.fileMetrics[0].syntax.after.id, report.layers[0].files[0].syntax.before.id);
+  assert.equal(report.layers[2].files[0].syntax.before.status, "absent");
 });
 
 test("Local long-line diffstats exclude unchanged context and retain both sides of replacements", (t) => {

@@ -5,6 +5,7 @@ import { createReport, digest } from "./report.mjs";
 import { analyzeChangedLines, analyzeSnapshot, compareSnapshots } from "./metric-analysis.mjs";
 import { changedLines } from "./metric-plugins/diff-lines.mjs";
 import { physicalLines } from "./metric-plugins/text-shape.mjs";
+import { createSyntaxAnalyzer } from "./syntax/analyzer.mjs";
 
 function reference(git, ref) {
   if (typeof ref !== "string" || !ref || ref.includes("\0")) throw new Error("An explicit base reference is required");
@@ -134,7 +135,8 @@ export function getLocalFileDiff({ cwd = process.cwd(), report, scope, path,
 }
 
 export function analyzeLocal({ cwd = process.cwd(), base, includeWorking = false,
-  maxCommits = 250, maxFiles = 3000, maxBlobBytes = 16 * 1024 * 1024 } = {}) {
+  maxCommits = 250, maxFiles = 3000, maxBlobBytes = 16 * 1024 * 1024,
+  syntaxAnalyzer = createSyntaxAnalyzer() } = {}) {
   const gitOptions = ["--no-pager", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false"];
   const initialGit = (args, options = {}) => run("git", [...gitOptions, ...args], { cwd, ...options });
   const root = realpathSync(initialGit(["rev-parse", "--show-toplevel"]).trim());
@@ -150,7 +152,10 @@ export function analyzeLocal({ cwd = process.cwd(), base, includeWorking = false
   const changeMeasurements = new Map();
   function snapshot(revision, path, bytes) {
     const key = `${revision}\0${path}`;
-    if (!measurements.has(key)) measurements.set(key, analyzeSnapshot(bytes, path));
+    if (!measurements.has(key)) {
+      const syntax = syntaxAnalyzer(bytes, path);
+      measurements.set(key, { syntax, metrics: analyzeSnapshot(bytes, path, { syntax }) });
+    }
     return measurements.get(key);
   }
 
@@ -201,14 +206,15 @@ export function analyzeLocal({ cwd = process.cwd(), base, includeWorking = false
         }
         changes = changeMeasurements.get(key);
       }
+      const beforeSnapshot = snapshot(before, state.previousPath ?? entry.path, left);
+      const afterSnapshot = snapshot(after, entry.path, right);
       return {
         path: entry.path, previousPath: state.previousPath, status: state.status,
         additions: isBinary ? 0 : entry.additions, deletions: isBinary ? 0 : entry.deletions,
         binary: isBinary, beforeBytes: left?.length ?? null, afterBytes: right?.length ?? null,
         patchState: isBinary ? "binary" : state.status === "renamed" && !entry.additions && !entry.deletions ? "rename-only" : "complete",
-        alternativeMetrics: compareSnapshots(
-          snapshot(before, state.previousPath ?? entry.path, left),
-          snapshot(after, entry.path, right), changes),
+        syntax: { before: beforeSnapshot.syntax, after: afterSnapshot.syntax },
+        alternativeMetrics: compareSnapshots(beforeSnapshot.metrics, afterSnapshot.metrics, changes),
       };
     });
   }
@@ -243,9 +249,12 @@ export function analyzeLocal({ cwd = process.cwd(), base, includeWorking = false
       fingerprints.push({ scope: "untracked", path, hash: digest(bytes) });
       const text = isBinary ? "" : bytes.toString("utf8");
       const lines = text ? text.split("\n").length - (text.endsWith("\n") ? 1 : 0) : 0;
+      const beforeSnapshot = snapshot("absent", path, null);
+      const afterSnapshot = snapshot("working", path, bytes);
       return { path, previousPath: null, status: "added", additions: lines, deletions: 0,
         binary: isBinary, beforeBytes: null, afterBytes: bytes.length, patchState: isBinary ? "binary" : "complete",
-        alternativeMetrics: compareSnapshots(analyzeSnapshot(null, path), snapshot("working", path, bytes),
+        syntax: { before: beforeSnapshot.syntax, after: afterSnapshot.syntax },
+        alternativeMetrics: compareSnapshots(beforeSnapshot.metrics, afterSnapshot.metrics,
           isBinary ? null : analyzeChangedLines({ before: [], after: physicalLines(text) }, path)) };
     });
     layers.push({ id: "untracked", title: "Untracked files (not part of HEAD)", files: untrackedFiles });

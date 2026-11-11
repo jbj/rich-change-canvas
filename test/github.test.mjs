@@ -44,7 +44,8 @@ test("PR and merge-commit comparisons retain exact scope and immutable identity"
   assert.equal(report.commits[0].parentCount, 2);
   assert.equal(report.commits[0].parentSha, "parent");
   assert.equal(report.source.state, "open");
-  assert.equal(report.structuralAnalysis.status, "unavailable");
+  assert.equal(report.structuralAnalysis.status, "available");
+  assert.ok(Object.keys(report.syntaxSnapshots).length > 0);
 });
 
 test("Missing text patches are reconstructed from exact snapshots", async () => {

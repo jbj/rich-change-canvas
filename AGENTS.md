@@ -7,7 +7,7 @@ Run focused tests for the changed behavior, then the integrated suite:
 
 ```sh
 node --test test/output.test.mjs
-node --test test/*.test.mjs research/metrics.test.mjs
+npm test
 ```
 
 ## Testing the live canvas

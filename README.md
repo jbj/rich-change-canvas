@@ -247,8 +247,10 @@ The canvas requires the Copilot App extension runtime and an authenticated
 Run the analyzer, persistence, CLI, renderer, and corpus-replay tests:
 
 ```sh
-node --test test/*.test.mjs research/metrics.test.mjs
+npm test
 ```
+
+GitHub Actions runs this suite on every push and pull request using Node.js 22.
 
 ### Retesting canvas changes
 

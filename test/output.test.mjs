@@ -168,7 +168,9 @@ test("Summary conditionally shows scope-local complexity even when file deltas c
   const report = createReport({
     source: { kind: "local", repository: "fixture" }, title: "Summary", comparison: {},
     files: [increase, decrease, unchanged, file("bad.js", "function f(", "function f("),
-      file("README.md", "Old docs", "New docs")],
+      file("README.md", "Old docs", "New docs"),
+      { path: "asset.bin", status: "modified", binary: true, additions: 0, deletions: 0,
+        beforeBytes: 4, afterBytes: 9, patchState: "binary" }],
     layers: [
       { id: "index", title: "Staged", files: [increase] },
       { id: "working", title: "Unstaged", files: [unchanged] },
@@ -179,7 +181,17 @@ test("Summary conditionally shows scope-local complexity even when file deltas c
     source: { kind: "fixture" }, title: "No complexity changes", comparison: {}, files: [unchanged],
   });
   const page = reviewPage(report, noComplexity);
+  const complexityTotal = () => page.totals.children.find((stat) => stat.children[1].textContent === "cyclomatic complexity");
   assert.equal(page.metric.value, "summary");
+  assert.equal(page.metric.children[0].tag, "option");
+  assert.equal(page.metric.children[0].value, "summary");
+  assert.equal(page.metric.children[1].tag, "optgroup");
+  assert.equal(page.metric.children[1].attributes.label, "Language-independent");
+  assert.equal(page.totals.children.at(-1), complexityTotal());
+  assert.equal(page.totals.children.at(-2).children[1].textContent, "binary files");
+  assert.equal(complexityTotal().children[0].textContent, "+1 (partial)");
+  assert.match(descendant(complexityTotal(), (node) => node.className === "count").attributes.title, /partial/);
+  assert.equal(descendant(complexityTotal(), (node) => node.className === "added").textContent, "+1 (partial)");
   assert.equal(page["complexity-heading"].hidden, false);
   assert.equal(page["value-heading"].textContent, "+added / −deleted");
   assert.equal(fileRow(page, "up.js").children[1].textContent, "+1 / -1");
@@ -194,11 +206,13 @@ test("Summary conditionally shows scope-local complexity even when file deltas c
   assert.match(fileRow(page, "README.md").children[2].children[0].attributes.title, /unsupported/);
   assert.match(page["complexity-heading"].attributes.title, /partial/);
   page.scope.value = "whole"; page.scope.events.change();
+  assert.equal(complexityTotal(), undefined);
   assert.equal(page["complexity-heading"].hidden, false);
   assert.equal(categoryRow(page, "source").children[2].textContent, "");
   assert.equal(diffRow(page, "up.js").children[0].colSpan, 3);
   categoryToggle(page, "source").events.click();
   page.metric.value = "bytes"; page.metric.events.change();
+  assert.equal(complexityTotal(), undefined);
   assert.equal(page["complexity-heading"].hidden, true);
   assert.equal(categoryRow(page, "source").children.length, 2);
   assert.equal(fileRow(page, "up.js").hidden, false);
@@ -209,11 +223,15 @@ test("Summary conditionally shows scope-local complexity even when file deltas c
     page.scope.value = scope; page.scope.events.change();
     assert.equal(page.metric.value, "summary");
     assert.equal(page["complexity-heading"].hidden, !visible);
+    assert.equal(Boolean(complexityTotal()), visible);
   }
+  assert.equal(complexityTotal().children[0].textContent, "-1");
+  assert.equal(descendant(complexityTotal(), (node) => node.className === "deleted").textContent, "-1");
   assert.equal(fileRow(page, "down.js").children[2].textContent, "-1");
   page.report.value = "1"; page.report.events.change();
   assert.equal(page.metric.value, "summary");
   assert.equal(page["complexity-heading"].hidden, true);
+  assert.equal(complexityTotal(), undefined);
   assert.equal(categoryRow(page, "source").children.length, 2);
 });
 

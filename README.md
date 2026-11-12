@@ -202,7 +202,9 @@ expanded file rows. **Summary** is the default: it always shows **+added /
 −deleted** text lines and adds a **Cyclomatic complexity** column when at least
 one file in the selected scope has a nonzero complexity delta. Offsetting file
 deltas still show the column even if the role total is zero. Inapplicable
-complexity entries are blank, rather than labeled "Not applicable". Metric changes
+complexity entries are blank, rather than labeled "Not applicable". Summary sits
+above the grouped metric choices, and its totals line ends with the signed
+cyclomatic-complexity delta when that scope total is nonzero. Metric changes
 preserve expanded roles; report/scope changes preserve the metric selection.
 Original-commit counts and Compare reports remain explicitly labeled
 text-line navigation summaries.

@@ -212,7 +212,7 @@
     }
     const nonTextChange = (file) => file.binary || file.status === "renamed" || file.status === "copied";
     const complexity = (target) => target.alternativeMetrics?.["cyclomatic-complexity"];
-    const changedComplexity = (file) => Number.isFinite(complexity(file)?.delta) && complexity(file).delta !== 0;
+    const changedComplexity = (target) => Number.isFinite(complexity(target)?.delta) && complexity(target).delta !== 0;
     function omitFile(file) {
       if (isLines()) return !file.additions && !file.deletions && !nonTextChange(file) &&
         !(isSummary() && changedComplexity(file));
@@ -313,11 +313,15 @@
         summary = availability(result);
         summaryLabel = "measurement coverage";
       }
-      for (const [value, title, className] of [
+      const stats = [
         [String(metrics.files), "files", "accent"],
         [metricValue(metrics), isLines() ? "text lines" : metric().label, ""],
         [summary, summaryLabel, "muted"],
-      ]) {
+      ];
+      if (isSummary() && changedComplexity(metrics)) {
+        stats.push([snapshotDelta(complexity(metrics)), "cyclomatic complexity", ""]);
+      }
+      for (const [value, title, className] of stats) {
         if (title === "binary files" && metrics.binaryFiles === 0) continue;
         const stat = el("div", undefined, "stat");
         const valueNode = el("span", undefined, `num ${className}${title === "measurement coverage" ? " coverage" : ""}`);
@@ -547,14 +551,18 @@
     $("report").value = "0";
     const groups = new Map();
     for (const definition of definitions.values()) {
+      const option = el("option", definition.label);
+      option.value = definition.id;
+      if (definition.id === "summary") {
+        $("metric").append(option);
+        continue;
+      }
       if (!groups.has(definition.tier)) {
         const group = el("optgroup");
         group.setAttribute("label", definition.tier);
         groups.set(definition.tier, group);
         $("metric").append(group);
       }
-      const option = el("option", definition.label);
-      option.value = definition.id;
       groups.get(definition.tier).append(option);
     }
     $("metric").value = "summary";

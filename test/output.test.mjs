@@ -149,15 +149,93 @@ function metricFile(path, before, after, additions = 1) {
       analyzeChangedLines({ before: physicalLines(before), after: physicalLines(after) }, path)) };
 }
 
-test("Syntax metric selection shows snapshot complexity, partial coverage and original-commit evidence", () => {
+function syntaxMetricFiles() {
   const parse = createSyntaxAnalyzer({ directory: null });
-  const file = (path, before, after) => {
+  return (path, before, after) => {
     const syntax = { before: parse(Buffer.from(before), path), after: parse(Buffer.from(after), path) };
     return { path, status: "modified", additions: 1, deletions: 1, syntax,
       alternativeMetrics: compareSnapshots(
         analyzeSnapshot(Buffer.from(before), path, { syntax: syntax.before }),
         analyzeSnapshot(Buffer.from(after), path, { syntax: syntax.after })) };
   };
+}
+
+test("Summary conditionally shows scope-local complexity even when file deltas cancel", () => {
+  const file = syntaxMetricFiles();
+  const increase = file("up.js", "function f() {}", "function f(x) { if(x) return; }");
+  const decrease = file("down.js", "function f(x) { if(x) return; }", "function f() {}");
+  const unchanged = file("same.js", "function f() {}", "function f() {}");
+  const report = createReport({
+    source: { kind: "local", repository: "fixture" }, title: "Summary", comparison: {},
+    files: [increase, decrease, unchanged, file("bad.js", "function f(", "function f(")],
+    layers: [
+      { id: "index", title: "Staged", files: [increase] },
+      { id: "working", title: "Unstaged", files: [unchanged] },
+    ],
+    commits: [{ sha: "one", subject: "Function", files: [decrease] }],
+  });
+  const noComplexity = createReport({
+    source: { kind: "fixture" }, title: "No complexity changes", comparison: {}, files: [unchanged],
+  });
+  const page = reviewPage(report, noComplexity);
+  assert.equal(page.metric.value, "summary");
+  assert.equal(page["complexity-heading"].hidden, false);
+  assert.equal(page["value-heading"].textContent, "+added / −deleted");
+  assert.equal(fileRow(page, "up.js").children[1].textContent, "+1 / -1");
+  assert.equal(fileRow(page, "up.js").children[2].textContent, "+1");
+  assert.equal(fileRow(page, "down.js").children[2].textContent, "-1");
+  assert.equal(fileRow(page, "up.js").children[2].children[0].children[0].className, "added");
+  assert.equal(fileRow(page, "down.js").children[2].children[0].children[0].className, "deleted");
+  assert.equal(fileRow(page, "same.js").children[2].textContent, "");
+  assert.equal(fileRow(page, "bad.js").children[2].textContent, "N/A");
+  assert.match(page["complexity-heading"].attributes.title, /partial/);
+  page.scope.value = "whole"; page.scope.events.change();
+  assert.equal(page["complexity-heading"].hidden, false);
+  assert.equal(categoryRow(page, "source").children[2].textContent, "");
+  assert.equal(diffRow(page, "up.js").children[0].colSpan, 3);
+  categoryToggle(page, "source").events.click();
+  page.metric.value = "bytes"; page.metric.events.change();
+  assert.equal(page["complexity-heading"].hidden, true);
+  assert.equal(categoryRow(page, "source").children.length, 2);
+  assert.equal(fileRow(page, "up.js").hidden, false);
+  page.metric.value = "summary"; page.metric.events.change();
+  assert.equal(page["complexity-heading"].hidden, false);
+  assert.equal(fileRow(page, "up.js").hidden, false);
+  for (const [scope, visible] of [["working", false], ["index", true], ["commit:0", true]]) {
+    page.scope.value = scope; page.scope.events.change();
+    assert.equal(page.metric.value, "summary");
+    assert.equal(page["complexity-heading"].hidden, !visible);
+  }
+  assert.equal(fileRow(page, "down.js").children[2].textContent, "-1");
+  page.report.value = "1"; page.report.events.change();
+  assert.equal(page.metric.value, "summary");
+  assert.equal(page["complexity-heading"].hidden, true);
+  assert.equal(categoryRow(page, "source").children.length, 2);
+});
+
+test("Snapshot deltas distinguish negative, zero and unavailable values without chart markup", () => {
+  const report = createReport({
+    source: { kind: "fixture" }, title: "Deltas", comparison: {},
+    files: [
+      metricFile("negative.js", "longer\n", "x\n"),
+      metricFile("zero.js", "x\n", "y\n"),
+      { path: "missing.js", status: "modified", additions: 1, deletions: 1 },
+    ],
+  });
+  const html = renderReports([report]);
+  assert.doesNotMatch(html, /mini-bar|bar-heading|metric-legend|createElementNS|bar-column/);
+  const page = reviewHtml(html);
+  page.metric.value = "bytes"; page.metric.events.change();
+  assert.equal(fileRow(page, "negative.js").children[1].textContent, "-5");
+  assert.equal(fileRow(page, "negative.js").children[1].children[0].children[0].className, "deleted");
+  assert.equal(fileRow(page, "zero.js").children[1].textContent, "");
+  assert.equal(fileRow(page, "missing.js").children[1].textContent, "Unavailable");
+  assert.match(fileRow(page, "missing.js").children[1].children[0].attributes.title, /missing-content/);
+  assert.match(categoryRow(page, "source").children[1].textContent, /-5 \(partial\)/);
+});
+
+test("Syntax metric selection shows snapshot complexity, partial coverage and original-commit evidence", () => {
+  const file = syntaxMetricFiles();
   const valid = file("a.js", "function f() {}", "function f(x) { if(x) return; }");
   const report = createReport({
     source: { kind: "fixture" }, title: "Syntax", comparison: {},
@@ -169,26 +247,27 @@ test("Syntax metric selection shows snapshot complexity, partial coverage and or
   assert.ok(Object.keys(report.syntaxSnapshots).length);
   page.metric.value = "cyclomatic-complexity"; page.metric.events.change();
   assert.match(page["metric-note"].textContent, /Syntax.*per-function/);
-  assert.match(page.totals.textContent, /1 \(partial\) → 2 \(partial\) paths/);
+  assert.match(page.totals.textContent, /\+1 \(partial\)/);
   assert.match(page.totals.textContent, /partial/);
-  assert.match(fileRow(page, "a.js").textContent, /1 → 2 paths/);
+  assert.equal(fileRow(page, "a.js").children[1].textContent, "+1");
   assert.match(fileRow(page, "bad.js").textContent, /N\/A/);
-  assert.equal(page["bar-heading"].hidden, false);
+  assert.equal(page["complexity-heading"].hidden, true);
   page.scope.value = "commit:0"; page.scope.events.change();
-  assert.match(page.totals.textContent, /1 → 2 paths/);
+  assert.equal(fileRow(page, "a.js").children[1].textContent, "+1");
   assert.doesNotMatch(page.totals.textContent, /partial/);
   assert.equal(page.metric.value, "cyclomatic-complexity");
 });
-test("Metric selection drives absolute diffstats without bars and retains snapshot bars", () => {
+test("Metric selection drives diffstats and signed snapshot deltas without charts", () => {
   const report = createReport({
     source: { kind: "local", repository: "fixture" }, title: "Metrics",
     comparison: { mergeBaseSha: "base", headSha: "head" },
     files: [metricFile("a.js", "x\n", "\n\nx\n"), metricFile("b.js", "x\n", "longer\n")],
   });
   const page = reviewPage(report);
-  assert.equal(page.metric.value, "lines");
-  assert.equal(page["bar-heading"].hidden, true);
-  assert.equal(page["metric-legend"].hidden, true);
+  assert.equal(page.metric.value, "summary");
+  assert.equal(page["complexity-heading"].hidden, true);
+  assert.equal(page["bar-heading"], undefined);
+  assert.equal(page["metric-legend"], undefined);
   assert.equal(categoryRow(page, "source").children.length, 2);
   assert.equal(fileRow(page, "a.js").children.length, 2);
   categoryToggle(page, "source").events.click();
@@ -203,31 +282,26 @@ test("Metric selection drives absolute diffstats without bars and retains snapsh
   assert.equal(page["value-heading"].textContent, "+added / −removed");
   assert.equal(categoryRow(page, "source").children.length, 2);
   assert.equal(fileRow(page, "a.js").children.length, 2);
-  assert.equal(page["bar-heading"].hidden, true);
-  assert.equal(page["metric-legend"].hidden, true);
+  assert.equal(page["complexity-heading"].hidden, true);
   page.metric.value = "bytes";
   page.metric.events.change();
-  assert.match(page.totals.textContent, /4 → 11 B \(Δ \+7\)/);
-  assert.match(categoryRow(page, "source").children[1].textContent, /4 → 11 B/);
-  assert.match(page["line-scale"].textContent, /0–11 B/);
-  const snapshots = categoryRow(page, "source").children[2].children[0].children;
-  assert.deepEqual(snapshots.map((rect) => rect.attributes.class), ["bar-before", "bar-after"]);
-  assert.deepEqual(snapshots.map((rect) => rect.attributes.y), ["0", "5"]);
-  assert.equal(page["bar-heading"].hidden, false);
-  assert.equal(page["metric-legend"].hidden, false);
-  assert.equal(page["bar-heading"].textContent, "Snapshots");
-  assert.equal(categoryRow(page, "source").children.length, 3);
-  assert.equal(fileRow(page, "a.js").children.length, 3);
-  assert.equal(diffRow(page, "a.js").children[0].colSpan, 3);
-  assert.deepEqual(snapshots.map((rect) => Number(rect.attributes.width)), [4 / 11 * 100, 100]);
+  assert.match(page.totals.textContent, /\+7/);
+  assert.equal(categoryRow(page, "source").children[1].textContent, "+7");
+  assert.equal(categoryRow(page, "source").children[1].children[0].children[0].className, "added");
+  assert.equal(page["value-heading"].textContent, "Δ B");
+  assert.equal(page["line-scale"], undefined);
+  assert.equal(categoryRow(page, "source").children.length, 2);
+  assert.equal(fileRow(page, "a.js").children.length, 2);
+  assert.equal(diffRow(page, "a.js").children[0].colSpan, 2);
   page.metric.value = "repeated-lines";
   page.metric.events.change();
-  assert.match(page.totals.textContent, /0 → 0 lines/);
-  assert.equal(page["value-heading"].textContent, "Before → after (Δ)");
+  assert.equal(categoryRow(page, "source").children[1].textContent, "");
+  assert.equal(fileRow(page, "a.js").children[1].textContent, "");
+  assert.equal(page["value-heading"].textContent, "Δ lines");
   page.metric.value = "lines";
   page.metric.events.change();
   assert.match(categoryRow(page, "source").children[1].textContent, /\+2 \/ -2/);
-  assert.equal(page["bar-heading"].hidden, true);
+  assert.equal(page["complexity-heading"].hidden, true);
   assert.equal(categoryRow(page, "source").children.length, 2);
   assert.equal(diffRow(page, "a.js").children[0].colSpan, 2);
 });
@@ -247,9 +321,8 @@ test("Text churn exposes absolute added/removed counts, including zero-line rena
   assert.equal(fileRow(page, "b.js").children[1].textContent, "+1 lines");
   assert.match(page.totals.textContent, /\+3 \/ -1 lines/);
   assert.doesNotMatch(page.totals.textContent, /Δ|→/);
-  assert.equal(page["bar-heading"].textContent, "Snapshots");
-  assert.equal(page["bar-heading"].hidden, true);
-  assert.equal(page["metric-legend"].hidden, true);
+  assert.equal(page["complexity-heading"].hidden, true);
+  assert.equal(page["metric-legend"], undefined);
   assert.equal(fileRow(page, "a.js").children.length, 2);
   assert.equal(categoryRow(page, "source").children.length, 2);
   assert.doesNotMatch(page.totals.textContent, /%|entropy|concentration/);
@@ -280,8 +353,8 @@ test("Long-line diffstats render seven added and one removed without bars", () =
   assert.match(fileRow(page, "a.js").children[1].textContent, /\+7 \/ -1/);
   assert.equal(categoryRow(page, "source").children.length, 2);
   assert.equal(fileRow(page, "a.js").children.length, 2);
-  assert.equal(page["bar-heading"].hidden, true);
-  assert.equal(page["metric-legend"].hidden, true);
+  assert.equal(page["complexity-heading"].hidden, true);
+  assert.equal(page["metric-legend"], undefined);
 });
 
 test("Diffstats omit zero sides and zero-only rows without losing expansion across metric filters", () => {
@@ -708,8 +781,8 @@ test("Text-line roles and files use balanced numeric columns without bars", () =
   assert.equal(source.children.length, 2);
   assert.equal(tests.children.length, 2);
   assert.equal(docs.children.length, 2);
-  assert.equal(page["bar-heading"].hidden, true);
-  assert.equal(page["metric-legend"].hidden, true);
+  assert.equal(page["complexity-heading"].hidden, true);
+  assert.equal(page["metric-legend"], undefined);
   assert.equal(page["evidence-panel"], undefined);
   assert.equal(page["provenance-panel"], undefined);
   const testFile = fileRow(page, "test/main.test.js");
@@ -896,8 +969,8 @@ test("Retained corpus reports remain viewable offline with navigable real PR sco
   assert.equal(page["report-rows"].children.length, 30);
   const descendants = (node) => [node, ...node.children.flatMap(descendants)];
   function assertNumericColumns() {
-    assert.equal(page["bar-heading"].hidden, true);
-    assert.equal(page["metric-legend"].hidden, true);
+    assert.equal(page["complexity-heading"].hidden, true);
+    assert.equal(page["metric-legend"], undefined);
     for (const row of page["category-rows"].children) {
       if (row.className !== "diff-row") assert.equal(row.children.length, 2);
     }

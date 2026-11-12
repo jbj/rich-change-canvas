@@ -9,8 +9,10 @@ prevent a filename from being truncated or a number from wrapping.
 From left to right, the table has:
 
 1. A left-aligned **Role / files** column.
-2. Right-aligned **metric values**, followed by a right-aligned **chart** column
-   for metrics that show snapshot charts.
+2. Right-aligned **metric values**. The default **Summary** view always shows
+   added/deleted text lines and adds a **Cyclomatic complexity** delta column
+   when any file in the selected scope has a nonzero delta, even if file deltas
+   cancel out in the role totals. Other selections have one numeric column.
 3. Any **unused space**, after the last stats column.
 
 Column boundaries are shared by the header, role rows, and visible file rows.
@@ -28,9 +30,8 @@ The sizing priority is:
    The filename minimum aims to leave roughly ten visible characters plus the
    ellipsis, measured using the first and last five graphemes rather than a fixed
    pixel width. Short labels need not grow to that minimum.
-4. Wrappable stats columns share further shrinkage in proportion to their
-   available shrink capacity. Charts retain their natural width while the
-   column minimums can fit.
+4. Both numeric columns share further shrinkage in proportion to their
+   available shrink capacity.
 
 If even the combined minimums cannot fit, containment takes precedence: the
 filename column can shrink below its normal minimum, then remaining stats
@@ -71,8 +72,8 @@ column's width.
 | [`src/render.mjs`](../src/render.mjs) | Packages the allocator and browser assets into the self-contained report. Assets are cached at module import. |
 | [`research/browser-review.mjs`](../research/browser-review.mjs) | Browser harness, `auditReview`, and `inspectTableLayout` assertions against actual rendered geometry. |
 
-Each row has four CSS grid tracks: filename, metric values, optional chart, and
-trailing surplus. The surplus track is decorative, not a semantic data column.
+Each row has four CSS grid tracks: filename, metric values, optional complexity,
+and trailing surplus. The surplus track is decorative, not a semantic data column.
 Diff cells span all tracks.
 
 The renderer batches measurement writes and reads. It clones only visible cells
@@ -87,8 +88,10 @@ push stats to the right edge. Both break the shared, compact-column contract.
 
 ## Automated tests
 
-Run from the repository root with Node.js 22+ and Git. No build or dependency
-installation is needed.
+Run from the repository root with Node.js 22+ and Git. No build is needed.
+Restore pinned dependencies first if they are missing
+(`npm ci --ignore-scripts --omit=optional`, prefixed with `gh cfs --` in a
+configured CFS environment).
 
 ```sh
 node --test test/table-layout.test.mjs test/output.test.mjs test/browser-review.test.mjs
@@ -96,7 +99,7 @@ npm test
 ```
 
 - [`test/table-layout.test.mjs`](../test/table-layout.test.mjs) covers natural
-  widths, exact fits, filename-first shrinking, stats wrapping, fixed charts,
+  widths, exact fits, filename-first shrinking, stats wrapping, fixed tracks,
   extreme counts and paths, growing back to natural widths, fractional and
   impossible widths, and invalid measurements.
 - [`test/output.test.mjs`](../test/output.test.mjs) covers renderer behavior,
@@ -133,9 +136,10 @@ JS
 node research/browser-review.mjs "$FOOTPRINT_REVIEW_DIR/edges.html"
 ```
 
-Open the printed loopback URL. The seven fixtures cover short paths, long
+Open the printed loopback URL. The eight fixtures cover short paths, long
 filenames, huge counts and binary sizes, the widest path and stats occurring in
-different rows, renames and Unicode, an empty scope, and a long embedded diff.
+different rows, renames and Unicode, an empty scope, a long embedded diff, and
+Summary complexity deltas that cancel in the role totals.
 
 The **Audit all reports** button uses widths 480, 640, 800, 1024, and 1280 CSS
 pixels. To include a narrower stress case, run this in the harness page's browser
@@ -183,8 +187,11 @@ narrow widths. Confirm:
 - Expanding/collapsing roles and resizing both ways recompute natural widths.
 - Added and renamed files have no status text or reserved status area beside
   their names. Full paths remain accessible.
-- Charts remain visible and right-aligned at narrow widths. Opening a long diff
-  does not widen columns; both diff wrapping modes work without page overflow.
+- Summary shows its complexity column only for nonzero file deltas in the
+  selected scope. Both numeric columns remain right-aligned and can wrap at
+  narrow widths. Snapshot metrics show signed deltas, blank zeros, and no charts.
+  Opening a long diff does not widen columns; both diff wrapping modes work
+  without page overflow.
 
 Automated geometry checks complement visual and keyboard inspection; they do
 not replace it.

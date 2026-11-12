@@ -155,7 +155,7 @@
             const characters = Array.from(pathSegments.segment(label.textContent), ({ segment }) => segment);
             if (characters.length > 10) label.textContent = label.className === "file-name" ?
               `${characters.slice(0, 5).join("")}...${characters.slice(-5).join("")}` : characters.slice(0, 10).join("");
-          } else if (index === 1) {
+          } else {
             const value = probe.querySelector(".count") ?? probe;
             value.textContent = "0";
           }
@@ -164,7 +164,7 @@
           minimum[index] = Math.max(minimum[index], Math.ceil(probe.getBoundingClientRect().width));
         }
         const widths = fitTableColumns(table.clientWidth, preferred, minimum);
-        for (const [index, property] of ["--label-column", "--value-column", "--bar-column"].entries()) {
+        for (const [index, property] of ["--label-column", "--value-column", "--secondary-column"].entries()) {
           table.style.setProperty(property, `${widths[index]}px`);
         }
       } catch (error) {
@@ -185,7 +185,10 @@
     }
     const tableObserver = new ResizeObserver(scheduleLayout);
     tableObserver.observe(table);
-    const definitions = new Map([["lines", { id: "lines", label: "Added / deleted text lines",
+    const definitions = new Map([["summary", { id: "summary", label: "Summary",
+      tier: "Language-independent", mode: "summary",
+      description: "Added/deleted text lines, with cyclomatic complexity deltas when files in this scope change complexity." }],
+    ["lines", { id: "lines", label: "Added / deleted text lines",
       tier: "Language-independent", unit: "lines", mode: "churn",
       description: "Added/deleted physical text lines, including blanks and comments. Binary bytes are separate." }]]);
     for (const report of reports) for (const definition of report.metricCatalog ?? []) {
@@ -193,9 +196,10 @@
     }
     const metric = () => selected().metricCatalog?.find((definition) => definition.id === $("metric").value) ??
       definitions.get($("metric").value);
-    const isLines = () => metric().mode === "churn";
+    const isSummary = () => metric().mode === "summary";
+    const isLines = () => isSummary() || metric().mode === "churn";
     const isDiffstat = () => metric().mode === "diffstat";
-    const showsBars = () => !isLines() && !isDiffstat();
+    let showsComplexity = false;
     const numeric = (value) => Number(value.toFixed(2)).toLocaleString("en-US");
     const number = (value) => value === null || value === undefined ? "N/A" : numeric(value);
     const evidence = (target) => target.alternativeMetrics?.[metric().id];
@@ -207,8 +211,11 @@
         [result?.before, result?.after]).every(inapplicable);
     }
     const nonTextChange = (file) => file.binary || file.status === "renamed" || file.status === "copied";
+    const complexity = (target) => target.alternativeMetrics?.["cyclomatic-complexity"];
+    const changedComplexity = (file) => Number.isFinite(complexity(file)?.delta) && complexity(file).delta !== 0;
     function omitFile(file) {
-      if (isLines()) return !file.additions && !file.deletions && !nonTextChange(file);
+      if (isLines()) return !file.additions && !file.deletions && !nonTextChange(file) &&
+        !(isSummary() && changedComplexity(file));
       if (inapplicableMetric(file)) return true;
       if (!isDiffstat()) return false;
       const changes = evidence(file)?.changes;
@@ -220,18 +227,33 @@
       if (side.value === null) return side.status === "missing-content" ? "Unavailable" : "N/A";
       return `${number(side.value)}${side.status === "partial" ? " (partial)" : ""}`;
     }
-    function availability(result) {
+    function availability(result, diffstat = isDiffstat()) {
       if (!result) return "Metric was not measured in this report; reacquire to measure.";
-      const entries = isDiffstat() ? result.changes : result;
-      return (isDiffstat() ? ["additions", "deletions"] : ["before", "after"]).map((side) => {
+      const entries = diffstat ? result.changes : result;
+      return (diffstat ? ["additions", "deletions"] : ["before", "after"]).map((side) => {
         const entry = entries?.[side];
         if (!entry) return `${side}: unavailable`;
         return `${side}: ${entry.measured}/${entry.eligible} eligible files measured; ${entry.status}${entry.reasons.length ? `; ${entry.reasons.join(" ")}` : ""}`;
       }).join(". ");
     }
+    function snapshotDelta(result) {
+      const node = el("span", undefined, "count");
+      node.setAttribute("title", availability(result, false));
+      const change = result?.delta;
+      if (!Number.isFinite(change)) {
+        node.textContent = [result?.before, result?.after].every(inapplicable) ? "Not applicable" :
+          [result?.before, result?.after].some((side) => !side || side.status === "missing-content") ? "Unavailable" : "N/A";
+      } else if (change !== 0) {
+        const partial = result.before.status === "partial" || result.after.status === "partial";
+        node.append(el("span", `${change > 0 ? "+" : ""}${number(change)}${partial ? " (partial)" : ""}`,
+          change > 0 ? "added" : "deleted"));
+      }
+      return node;
+    }
     function metricValue(target) {
       if (isLines()) return delta(target);
       const result = evidence(target);
+      if (!isDiffstat()) return snapshotDelta(result);
       const node = el("span", undefined, "count");
       node.setAttribute("title", availability(result));
       if (inapplicableMetric(target)) {
@@ -259,42 +281,8 @@
              result?.after?.value !== null && result?.after?.value !== undefined)) {
           node.append(el("span", ` (whole file: ${sideText(result.before)} → ${sideText(result.after)})`, "muted"));
         }
-      } else {
-        const change = result?.delta;
-        node.textContent = `${sideText(result?.before)} → ${sideText(result?.after)} ${metric().unit}` +
-          (change === null || change === undefined ? "" : ` (Δ ${change > 0 ? "+" : ""}${number(change)})`);
       }
       return node;
-    }
-    function metricBar(target, maximum, label) {
-      const result = evidence(target);
-      if (inapplicableMetric(target)) return document.createTextNode("");
-      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.setAttribute("class", "mini-bar");
-      svg.setAttribute("viewBox", "0 0 100 8");
-      svg.setAttribute("role", "img");
-      svg.setAttribute("aria-label", `${label}: ${metricValue(target).textContent}; linear scale 0–${number(maximum)} ${metric().unit}. ${availability(result)}`);
-      const parts = [[result?.before?.value, "bar-before", 0, 3], [result?.after?.value, "bar-after", 5, 3]];
-      for (const [value, className, y, height] of parts) {
-        if (value === null || value === undefined) continue;
-        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        rect.setAttribute("x", "0");
-        rect.setAttribute("y", String(y));
-        rect.setAttribute("height", String(height));
-        rect.setAttribute("width", String(maximum ? Math.min(100, value / maximum * 100) : 0));
-        rect.setAttribute("class", className);
-        svg.append(rect);
-      }
-      return svg;
-    }
-    function metricMaximum(metrics) {
-      if (!showsBars()) return 0;
-      let maximum = 0;
-      for (const target of [...Object.values(metrics.categories), ...metrics.fileMetrics]) {
-        const result = evidence(target);
-        maximum = Math.max(maximum, result?.before?.value ?? 0, result?.after?.value ?? 0);
-      }
-      return maximum;
     }
     const selected = () => reports[Number($("report").value)];
     const scope = () => {
@@ -338,7 +326,7 @@
         $("totals").append(stat);
       }
     }
-    function fileRow(file, maximum, url, diffScope, isCategoryExpanded) {
+    function fileRow(file, url, diffScope, isCategoryExpanded) {
       const row = el("tr", undefined, "file-row");
       row.dataset.filePath = file.path;
       row.dataset.category = file.category;
@@ -363,7 +351,7 @@
       diffRow.hidden = true;
       diffRow.dataset.filePath = file.path;
       const diffCell = el("td");
-      diffCell.colSpan = showsBars() ? 3 : 2;
+      diffCell.colSpan = showsComplexity ? 3 : 2;
       const tools = el("div", undefined, "diff-tools");
       diffCell.append(tools);
       diffRow.append(diffCell);
@@ -383,17 +371,21 @@
       const pathCell = el("td");
       pathCell.append(details);
       const metricCell = el("td");
-      const barCell = showsBars() ? el("td") : null;
       if (!isLines()) {
         metricCell.append(metricValue(file));
-        if (barCell) barCell.append(metricBar(file, maximum, file.path));
       } else if (file.binary) {
         metricCell.append(el("span", `${file.beforeBytes ?? 0} → ${file.afterBytes ?? 0} B`, "count"));
       } else {
         metricCell.append(delta(file));
       }
-      row.append(pathCell, metricCell, ...(barCell ? [barCell] : []));
-      footprintRows.push({ row, name, cells: [pathCell, metricCell, ...(barCell ? [barCell] : [])] });
+      const cells = [pathCell, metricCell];
+      if (showsComplexity) {
+        const cell = el("td");
+        cell.append(snapshotDelta(complexity(file)));
+        cells.push(cell);
+      }
+      row.append(...cells);
+      footprintRows.push({ row, name, cells });
       return { row, diffRow, details };
     }
     function originalCommits(report) {
@@ -418,14 +410,12 @@
     const expandedRoles = new Set();
     function render(preserveRoles = false) {
       diffViews.clear();
-      footprintRows = [{ row: $("footprint-header"), cells: [$("label-heading"), $("value-heading"), $("bar-heading")] }];
+      footprintRows = [{ row: $("footprint-header"), cells: [$("label-heading"), $("value-heading"), $("complexity-heading")] }];
       if (preserveRoles !== true) expandedRoles.clear();
       const report = selected(), current = scope(), metrics = current.metrics;
+      showsComplexity = isSummary() && metrics.fileMetrics.some(changedComplexity);
       $("overview").dataset.metricMode = metric().mode;
-      $("overview").className = [
-        isLines() ? "" : "alternative-metric",
-        showsBars() ? "bar-metric" : "",
-      ].filter(Boolean).join(" ");
+      $("overview").className = isLines() ? "" : "alternative-metric";
       $("review-title").textContent = `${report.source.repository} / ${report.title}`;
       $("scope-note").textContent = report.layers.length ?
         "All combines independent committed / staged / unstaged / untracked snapshots. Counts are not additive; paths may repeat." :
@@ -433,21 +423,14 @@
       link($("commit-link"), current.url);
       totals(metrics);
       $("category-rows").replaceChildren();
-      const maximum = metricMaximum(metrics);
       $("metric-heading").textContent = `/ ${metric().label}`;
       $("metric-note").textContent = `${metric().tier} · ${metric().description}` +
         (isDiffstat() ? " Changed-line counts, not net differences: a qualifying replacement can count on both sides." : isLines() ? "" :
           " Whole changed-file snapshots, not only edited lines. Before/after deltas are not safety or quality scores.");
       $("value-heading").textContent = isLines() ? "+added / −deleted" :
-        isDiffstat() ? "+added / −removed" : "Before → after (Δ)";
-      $("bar-heading").textContent = "Snapshots";
-      $("bar-heading").hidden = !showsBars();
-      $("metric-legend").hidden = !showsBars();
-      $("legend-before").textContent = "before (top)";
-      $("legend-after").textContent = "after (bottom)";
-      $("legend-before").className = "snapshot-before";
-      $("legend-after").className = "snapshot-after";
-      $("line-scale").textContent = `Linear scale · 0–${number(maximum)} ${metric().unit}`;
+        isDiffstat() ? "+added / −removed" : `Δ ${metric().unit}`;
+      $("complexity-heading").hidden = !showsComplexity;
+      $("complexity-heading").setAttribute("title", `Signed change in per-function cyclomatic complexity. ${availability(complexity(metrics), false)}`);
       const url = fileDiffUrl(report, current);
       for (const [key, metric] of Object.entries(metrics.categories)) {
         const files = metrics.fileMetrics
@@ -463,21 +446,25 @@
         toggle.setAttribute("aria-expanded", String(expanded));
         nameCell.append(toggle);
         const metricCell = el("td");
-        const barCell = showsBars() ? el("td") : null;
         if (!isLines()) {
           metricCell.append(metricValue(metric));
-          if (barCell) barCell.append(metricBar(metric, maximum, roles[key]));
         } else if (key === "binary") {
           metricCell.append(el("span", `${metric.beforeBytes} → ${metric.afterBytes} B`, "count"));
         } else {
           metricCell.append(delta(metric));
         }
-        categoryRow.append(nameCell, metricCell, ...(barCell ? [barCell] : []));
-        footprintRows.push({ row: categoryRow, cells: [nameCell, metricCell, ...(barCell ? [barCell] : [])] });
+        const cells = [nameCell, metricCell];
+        if (showsComplexity) {
+          const cell = el("td");
+          cell.append(snapshotDelta(complexity(metric)));
+          cells.push(cell);
+        }
+        categoryRow.append(...cells);
+        footprintRows.push({ row: categoryRow, cells });
         const fileRows = files
           .map(({ file, fileIndex }) => {
             const diffScope = current.fileScopes?.[fileIndex] ?? current.key;
-            const result = fileRow(file, maximum, url, diffScope, () => expanded);
+            const result = fileRow(file, url, diffScope, () => expanded);
             result.row.hidden = !expanded;
             return result;
           });
@@ -569,7 +556,7 @@
       option.value = definition.id;
       groups.get(definition.tier).append(option);
     }
-    $("metric").value = "lines";
+    $("metric").value = "summary";
     $("report-control").hidden = reports.length === 1;
     $("reports-panel").hidden = reports.length === 1 && !reports[0].layers.some((layer) => layer.metrics.files);
     $("report").addEventListener("change", () => load());

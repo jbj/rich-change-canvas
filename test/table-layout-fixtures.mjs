@@ -1,4 +1,6 @@
 import { createReport } from "../src/report.mjs";
+import { createSyntaxAnalyzer } from "../src/syntax/analyzer.mjs";
+import { analyzeSnapshot, compareSnapshots } from "../src/metric-analysis.mjs";
 
 export function tableLayoutFixtures() {
   const text = (path, additions = 1, deletions = 1, extra = {}) => ({
@@ -10,6 +12,14 @@ export function tableLayoutFixtures() {
   });
   const long = `src/${"very-long-directory/".repeat(12)}${"W".repeat(60)}.js`;
   const huge = text("a.js", 1_234_567_890_123, 9_876_543_210_123);
+  const parse = createSyntaxAnalyzer({ directory: null });
+  const complexity = (path, before, after) => {
+    const snapshot = (content) => {
+      const bytes = Buffer.from(content);
+      return analyzeSnapshot(bytes, path, { syntax: parse(bytes, path) });
+    };
+    return text(path, 1, 1, { alternativeMetrics: compareSnapshots(snapshot(before), snapshot(after)) });
+  };
   return [
     ["Short paths and small counts", [text("a.js")]],
     ["Long filename with small counts", [text(long), text("b.js")]],
@@ -23,6 +33,12 @@ export function tableLayoutFixtures() {
     ["Diffs must not enlarge the shared columns", [text("a.js", 1, 1, {
       diff: { diff: `diff --git a/a.js b/a.js\n--- a/a.js\n+++ b/a.js\n@@ -1 +1 @@\n-old\n+${"long-token".repeat(200)}\n` },
     })]],
+    ["Summary complexity deltas with cancelling totals and a long path", [
+      complexity(long, "function f() {}", "function f(x) { if (x) return; }"),
+      complexity("down.js", "function f(x) { if (x) return; }", "function f() {}"),
+      complexity("zero.js", "function f() {}", "function f() {}"),
+      text("unavailable.js"),
+    ]],
   ].map(([title, files]) => createReport({
     source: { kind: "fixture", repository: "shared-column-edge-cases" }, title, comparison: {}, files,
   }));

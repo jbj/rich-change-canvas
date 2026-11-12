@@ -16,14 +16,15 @@ test("Only the filename column shrinks until its minimum is reached", () => {
   assert.deepEqual(preferred, [600, 150, 80]);
 });
 
-test("Stats wrap only after the filename reaches its minimum; indivisible charts keep their width", () => {
+test("Stats wrap only after the filename reaches its minimum; fixed tracks keep their width", () => {
   assert.deepEqual(fitTableColumns(300, [600, 150, 80], [110, 24, 80]), [110, 110, 80]);
   assert.deepEqual(fitTableColumns(240, [600, 150, 80], [110, 24, 80]), [110, 50, 80]);
   assert.deepEqual(fitTableColumns(214, [600, 150, 80], [110, 24, 80]), [110, 24, 80]);
 });
 
-test("Several wrappable stats columns share pressure without shrinking a fixed chart", () => {
+test("Several wrappable stats columns share pressure without shrinking a fixed track", () => {
   assert.deepEqual(fitTableColumns(440, [500, 220, 120, 80], [110, 20, 20, 80]), [110, 160, 90, 80]);
+  assert.deepEqual(fitTableColumns(360, [500, 220, 120], [110, 20, 20]), [110, 160, 90]);
 });
 
 test("Resizing back to a wide viewport restores natural widths, including very long paths and counts", () => {

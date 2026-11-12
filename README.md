@@ -9,6 +9,74 @@ has at most two human discussion entries, a non-author human approval on its hea
 before merge, and a maintainer approval. Bot activity is reported separately.
 This is a convenience sample, not a validated approval classifier.
 
+## Build, distribute, install, and update in Copilot App
+
+**Current delivery model: a full repository checkout with a project-local
+extension, not a standalone extension package.** There is no build step,
+published npm package, or release installer. Node.js source runs directly;
+the Tree-sitter runtime and grammars use pinned, prebuilt WASM assets.
+
+### Install and open
+
+Use Node.js **22 or newer**, Git, and a GitHub Copilot App version that supports
+canvas extensions. Clone the complete repository and install its dependencies:
+
+```sh
+git clone https://github.com/jbj/rich-change-canvas.git
+cd rich-change-canvas
+npm ci --ignore-scripts --omit=optional
+# In a configured CFS environment, replace the install command with:
+# gh cfs -- npm ci --ignore-scripts --omit=optional
+```
+
+Add/open this checkout as a repository in Copilot App and start a project
+session. Ask Copilot to **reload extensions**, confirm that
+`rich-change-review` loaded using the extension list/inspect tools, then ask
+it to **open the Rich change review canvas**. The App discovers
+`.github/extensions/rich-change-review/extension.mjs` and supplies
+`@github/copilot-sdk`; it does **not** install the npm dependencies for you.
+Missing packages or WASM assets prevent the provider from loading.
+
+The canvas analyzes the Git checkout containing the extension, not an arbitrary
+repository selected elsewhere in the App. It normally compares against the
+default branch; see [opening the review](#open-the-review-in-github-copilot)
+for baseline and authentication requirements. To analyze other repositories
+without deploying code into them, use the [standalone CLI](#analyze-your-own-changes).
+
+### Distribute
+
+For now, share the **complete repository** at a known branch, tag, or commit,
+and have recipients install dependencies as above. A source archive must
+retain hidden directories, including `.github/`, and be placed in the Git
+checkout to be analyzed. Copying only the extension folder, or using the
+App's extension-folder/gist installer, is **not sufficient**: the entrypoint
+imports `src/` and `web/` outside that folder, and needs runtime/grammar assets
+from `node_modules/`.
+
+A future portable release must bundle those modules, web assets, runtime
+JavaScript/WASM, grammar WASM, and license notices while preserving asset
+resolution. That bundler is not implemented. The current dependency install
+is approximately **85 MiB**; WASM avoids native compilation, but does not
+remove dependency installation or distribution requirements. See
+[distribution details](docs/syntax.md#installation-and-extension-distribution).
+
+### Update
+
+In a clean installed checkout tracking the desired branch:
+
+```sh
+git pull --ff-only
+npm ci --ignore-scripts --omit=optional
+# Configured CFS environment: gh cfs -- npm ci --ignore-scripts --omit=optional
+```
+
+For a pinned installation, check out the desired new tag/commit instead of
+pulling, then run the same dependency installation. Preserve any local changes
+before updating. In each active Copilot App session, ask Copilot to **reload
+extensions**, confirm the provider loaded, and reopen the review with a
+**fresh canvas instance**. Updating files or refreshing the existing page alone
+does not replace imported modules or guarantee a newly collected report.
+
 ## Analyze your own changes
 
 The standalone analyzer and browser UI work now, without a native extension.

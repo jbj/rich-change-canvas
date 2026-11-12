@@ -357,9 +357,15 @@ repository's default branch and uses its locally available ref. It does not
 fetch branches or execute repository code. If the default branch is not
 available locally, fetch it and reopen the canvas.
 
+When the checked-out HEAD has already been merged into the default branch with
+a merge commit, the canvas compares against that merge commit's first parent:
+the default branch as it was at merge time. This preserves the original diff
+and commits from local Git history even as the default branch advances.
+
 For repositories without a remote, pass an explicit baseline when opening the
 canvas, for example `input: { "base": "main" }`. The project extension resolves
 the checkout from its own location, not the session's artifact directory.
+An explicit base bypasses merged-branch detection.
 
 The canvas requires installed analyzer dependencies, the Copilot App extension runtime and an authenticated
 `gh` installation when a usable `origin/HEAD` ref is not available.

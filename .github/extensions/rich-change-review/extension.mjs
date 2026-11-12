@@ -2,14 +2,14 @@ import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { createCanvas, joinSession } from "@github/copilot-sdk/extension";
 import { analyzeLocal, getLocalFileDiff } from "../../../src/local.mjs";
-import { resolveDefaultBranch } from "../../../src/default-branch.mjs";
+import { resolveReviewBase } from "../../../src/default-branch.mjs";
 import { renderReports } from "../../../src/render.mjs";
 
 const servers = new Map();
 const repositoryPath = fileURLToPath(new URL("../../../", import.meta.url));
 
-function analyze(workspacePath, base = resolveDefaultBranch(workspacePath)) {
-  return analyzeLocal({ cwd: workspacePath, base, includeWorking: true });
+function analyze(workspacePath, base) {
+  return analyzeLocal({ cwd: workspacePath, base: resolveReviewBase(workspacePath, { base }), includeWorking: true });
 }
 
 async function startServer(report) {

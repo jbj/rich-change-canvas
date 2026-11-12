@@ -236,9 +236,10 @@
         return `${side}: ${entry.measured}/${entry.eligible} eligible files measured; ${entry.status}${entry.reasons.length ? `; ${entry.reasons.join(" ")}` : ""}`;
       }).join(". ");
     }
-    function snapshotDelta(result) {
+    function snapshotDelta(result, blankInapplicable = false) {
       const node = el("span", undefined, "count");
       node.setAttribute("title", availability(result, false));
+      if (blankInapplicable && [result?.before, result?.after].every(inapplicable)) return node;
       const change = result?.delta;
       if (!Number.isFinite(change)) {
         node.textContent = [result?.before, result?.after].every(inapplicable) ? "Not applicable" :
@@ -381,7 +382,7 @@
       const cells = [pathCell, metricCell];
       if (showsComplexity) {
         const cell = el("td");
-        cell.append(snapshotDelta(complexity(file)));
+        cell.append(snapshotDelta(complexity(file), true));
         cells.push(cell);
       }
       row.append(...cells);
@@ -456,7 +457,7 @@
         const cells = [nameCell, metricCell];
         if (showsComplexity) {
           const cell = el("td");
-          cell.append(snapshotDelta(complexity(metric)));
+          cell.append(snapshotDelta(complexity(metric), true));
           cells.push(cell);
         }
         categoryRow.append(...cells);

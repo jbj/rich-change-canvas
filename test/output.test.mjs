@@ -167,7 +167,8 @@ test("Summary conditionally shows scope-local complexity even when file deltas c
   const unchanged = file("same.js", "function f() {}", "function f() {}");
   const report = createReport({
     source: { kind: "local", repository: "fixture" }, title: "Summary", comparison: {},
-    files: [increase, decrease, unchanged, file("bad.js", "function f(", "function f(")],
+    files: [increase, decrease, unchanged, file("bad.js", "function f(", "function f("),
+      file("README.md", "Old docs", "New docs")],
     layers: [
       { id: "index", title: "Staged", files: [increase] },
       { id: "working", title: "Unstaged", files: [unchanged] },
@@ -188,6 +189,9 @@ test("Summary conditionally shows scope-local complexity even when file deltas c
   assert.equal(fileRow(page, "down.js").children[2].children[0].children[0].className, "deleted");
   assert.equal(fileRow(page, "same.js").children[2].textContent, "");
   assert.equal(fileRow(page, "bad.js").children[2].textContent, "N/A");
+  assert.equal(fileRow(page, "README.md").children[2].textContent, "");
+  assert.equal(categoryRow(page, "documentation").children[2].textContent, "");
+  assert.match(fileRow(page, "README.md").children[2].children[0].attributes.title, /unsupported/);
   assert.match(page["complexity-heading"].attributes.title, /partial/);
   page.scope.value = "whole"; page.scope.events.change();
   assert.equal(page["complexity-heading"].hidden, false);

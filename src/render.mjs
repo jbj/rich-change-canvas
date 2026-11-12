@@ -16,6 +16,8 @@ export function renderReports(reports) {
   const upgrade = (metrics) => addAlternativeMetrics(metrics);
   const enrichedReports = reports.map((report) => ({
     ...report,
+    // ASTs stay in immutable JSON reports; this metric-only dashboard does not traverse them.
+    syntaxSnapshots: undefined,
     metricCatalog: metricCatalog.map((definition) => {
       const saved = report.metricCatalog?.find((entry) => entry.id === definition.id);
       return saved?.version === definition.version && saved.mode === definition.mode && saved.unit === definition.unit ? saved : definition;

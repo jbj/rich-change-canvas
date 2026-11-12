@@ -4,26 +4,36 @@ import { aggregateChanges, aggregateSnapshots, measured, pair, unavailable, vali
 import { regexPlugins } from "./regex-metrics/index.mjs";
 import { languageForPath } from "./languages.mjs";
 import { binary } from "./process.mjs";
+import { complexityPlugin } from "./syntax/rules.mjs";
 
-const plugins = [...snapshotPlugins, ...regexPlugins];
+const plugins = [...snapshotPlugins, ...regexPlugins, complexityPlugin];
 validatePlugins([...plugins, ...changePlugins]);
 
 export const metricCatalog = [
   { id: "lines", version: 1, label: "Added / deleted text lines", unit: "lines",
     tier: "Language-independent", mode: "churn",
     description: "Added/deleted physical text lines, including blanks and comments. Binary bytes are separate." },
-  ...[...plugins, ...changePlugins].map(({ measure, supports, textOnly, legacy, ...metadata }) => metadata),
+  ...[...plugins, ...changePlugins].map(({ measure, supports, textOnly, legacy, requiresSyntax, ...metadata }) => metadata),
 ];
 
-export function analyzeSnapshot(bytes, path) {
+export function analyzeSnapshot(bytes, path, { syntax = null } = {}) {
   bytes ??= Buffer.alloc(0);
   const isBinary = binary(bytes);
-  const snapshot = { bytes, language: languageForPath(path),
+  const snapshot = { bytes, language: languageForPath(path), syntax,
     shape: isBinary ? null : textShape(bytes.toString("utf8")) };
   return Object.fromEntries(plugins.map((plugin) => {
-    const result = plugin.textOnly && isBinary ? unavailable("unsupported", "Binary or non-UTF-8 content.") :
-      plugin.supports && !plugin.supports(snapshot) ? unavailable("unsupported", "Language has no regex rules.") :
-        measured(plugin, plugin.measure(snapshot));
+    let result;
+    if (plugin.textOnly && isBinary) result = unavailable("unsupported", "Binary or non-UTF-8 content.");
+    else if (plugin.supports && !plugin.supports(snapshot)) {
+      result = unavailable("unsupported", "Language is not supported by this metric.");
+    } else if (plugin.requiresSyntax && !syntax) {
+      result = unavailable("missing-content", "Syntax evidence was not retained; reacquire to measure.");
+    } else if (plugin.requiresSyntax && !["available", "absent"].includes(syntax.status)) {
+      result = unavailable(syntax.status, syntax.reason ?? "Source has parse errors; complexity is unavailable.");
+    } else {
+      const raw = plugin.measure(snapshot);
+      result = { ...measured(plugin, raw), ...(plugin.requiresSyntax ? { functions: raw.functions } : {}) };
+    }
     return [plugin.id, result];
   }));
 }
@@ -58,7 +68,7 @@ function legacySide(plugin, file, side) {
   }
   if (plugin.textOnly && file.binary) return unavailable("unsupported", "Binary or non-UTF-8 content.");
   const language = languageForPath(side === "before" ? file.previousPath ?? file.path : file.path);
-  if (plugin.supports && !plugin.supports({ language })) return unavailable("unsupported", "Language has no regex rules.");
+  if (plugin.supports && !plugin.supports({ language })) return unavailable("unsupported", "Language is not supported by this metric.");
   if (absent) {
     return measured(plugin, plugin.measure({ bytes: Buffer.alloc(0), shape: textShape(""), language }));
   }

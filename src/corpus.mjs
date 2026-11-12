@@ -2,11 +2,11 @@ import { createReport } from "./report.mjs";
 import { createGithubCache } from "./github-cache.mjs";
 import { createGithubFiles } from "./github-files.mjs";
 
-export async function acquireCorpus(corpus, { api = createGithubCache() } = {}) {
+export async function acquireCorpus(corpus, { api = createGithubCache(), syntaxAnalyzer } = {}) {
   const retained = reportsFromCorpus(corpus);
   return Promise.all(retained.map(async (report, index) => {
     const sample = corpus.samples[index];
-    const collect = createGithubFiles({ repository: sample.repository, api });
+    const collect = createGithubFiles({ repository: sample.repository, api, syntaxAnalyzer });
     const [files, commits] = await Promise.all([
       collect(sample.files, sample.mergeBaseSha, sample.headSha),
       Promise.all(sample.commits.map(async (commit) => ({

@@ -11,6 +11,7 @@ import { reportsFromCorpus } from "../src/corpus.mjs";
 import { analyzeChangedLines, analyzeSnapshot, compareSnapshots } from "../src/metric-analysis.mjs";
 import { physicalLines } from "../src/metric-plugins/text-shape.mjs";
 import { pathToFileURL } from "node:url";
+import { createSyntaxAnalyzer } from "../src/syntax/analyzer.mjs";
 
 const cli = resolve("cli.mjs");
 function temporary(t) {
@@ -148,6 +149,36 @@ function metricFile(path, before, after, additions = 1) {
       analyzeChangedLines({ before: physicalLines(before), after: physicalLines(after) }, path)) };
 }
 
+test("Syntax metric selection shows snapshot complexity, partial coverage and original-commit evidence", () => {
+  const parse = createSyntaxAnalyzer({ directory: null });
+  const file = (path, before, after) => {
+    const syntax = { before: parse(Buffer.from(before), path), after: parse(Buffer.from(after), path) };
+    return { path, status: "modified", additions: 1, deletions: 1, syntax,
+      alternativeMetrics: compareSnapshots(
+        analyzeSnapshot(Buffer.from(before), path, { syntax: syntax.before }),
+        analyzeSnapshot(Buffer.from(after), path, { syntax: syntax.after })) };
+  };
+  const valid = file("a.js", "function f() {}", "function f(x) { if(x) return; }");
+  const report = createReport({
+    source: { kind: "fixture" }, title: "Syntax", comparison: {},
+    files: [valid, file("bad.js", "function f(", "function f(")],
+    commits: [{ sha: "one", subject: "Function", files: [valid] }],
+  });
+  const page = reviewPage(report);
+  assert.equal(JSON.parse(page["report-data"].textContent)[0].syntaxSnapshots, undefined);
+  assert.ok(Object.keys(report.syntaxSnapshots).length);
+  page.metric.value = "cyclomatic-complexity"; page.metric.events.change();
+  assert.match(page["metric-note"].textContent, /Syntax.*per-function/);
+  assert.match(page.totals.textContent, /1 \(partial\) → 2 \(partial\) paths/);
+  assert.match(page.totals.textContent, /partial/);
+  assert.match(fileRow(page, "a.js").textContent, /1 → 2 paths/);
+  assert.match(fileRow(page, "bad.js").textContent, /N\/A/);
+  assert.equal(page["bar-heading"].hidden, false);
+  page.scope.value = "commit:0"; page.scope.events.change();
+  assert.match(page.totals.textContent, /1 → 2 paths/);
+  assert.doesNotMatch(page.totals.textContent, /partial/);
+  assert.equal(page.metric.value, "cyclomatic-complexity");
+});
 test("Metric selection drives absolute diffstats without bars and retains snapshot bars", () => {
   const report = createReport({
     source: { kind: "local", repository: "fixture" }, title: "Metrics",
@@ -806,7 +837,8 @@ test("HTML embeds untrusted data without script or template injection", () => {
   const report = sample();
   const html = renderReports([report]);
   const json = html.match(/<script id="report-data"[^>]*>([\s\S]*?)<\/script>/)[1];
-  assert.deepEqual(JSON.parse(json), [report]);
+  const { syntaxSnapshots, ...projection } = report;
+  assert.deepEqual(JSON.parse(json), [projection]);
   assert.ok(!json.includes("<"));
   assert.ok(json.includes("__NONCE__"));
   assert.equal((html.match(/<script /g) ?? []).length, 2);
@@ -856,7 +888,7 @@ test("Retained corpus reports remain viewable offline with navigable real PR sco
   run("node", [cli, "view", ...reports.flatMap((report) => ["--input", join(output, `${report.id}.json`)]), "--out", output]);
   const html = readFileSync(join(output, "review.html"), "utf8");
   const embedded = JSON.parse(html.match(/<script id="report-data"[^>]*>([\s\S]*?)<\/script>/)[1]);
-  assert.deepEqual(embedded, reports);
+  assert.deepEqual(embedded, reports.map(({ syntaxSnapshots, ...projection }) => projection));
   for (const report of reports) assert.deepEqual(await loadReport(output, report.id), report);
   run("node", [cli, "view", "--input", join(output, `${reports[0].id}.json`), "--out", join(output, "reopened")]);
   const page = reviewHtml(html);

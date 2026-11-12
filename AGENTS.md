@@ -1,7 +1,10 @@
 # Development and verification
 
 This repository runs directly from Node.js source (Node.js 22+ and Git).
-There is no build or dependency-install step for the analyzer or dashboard.
+There is no build step. Install the pinned WASM runtime and grammar assets with
+`npm ci --ignore-scripts --omit=optional` before running the analyzer or tests.
+With a configured CFS environment, prefix that install with `gh cfs --`.
+Do not import native grammar bindings or build/download grammars at runtime.
 
 Run focused tests for the changed behavior, then the integrated suite:
 
@@ -9,6 +12,10 @@ Run focused tests for the changed behavior, then the integrated suite:
 node --test test/output.test.mjs
 npm test
 ```
+
+Syntax changes also need `node --test test/syntax.test.mjs`. The serializable
+syntax contract, complexity rules, cache behavior, and packaging constraints are
+documented in [docs/syntax.md](docs/syntax.md).
 
 For Footprint table changes, follow the
 [layout contract and testing guide](docs/footprint-table.md), including column

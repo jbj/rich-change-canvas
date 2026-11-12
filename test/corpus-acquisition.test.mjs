@@ -82,7 +82,7 @@ test("Corpus CLI replays cached acquisition with no gh calls, persists all evide
   assert.deepEqual(await loadReport(output, expected[0].id), expected[0]);
   const html = await readFile(join(output, "review.html"), "utf8");
   const embedded = JSON.parse(html.match(/<script id="report-data"[^>]*>([\s\S]*?)<\/script>/)[1]);
-  assert.deepEqual(embedded, expected);
+  assert.deepEqual(embedded, expected.map(({ syntaxSnapshots, ...projection }) => projection));
   execFileSync(process.execPath, [resolve("cli.mjs"), "view", "--input", join(output, `${expected[0].id}.json`),
     "--out", join(f.directory, "reopened")], { env });
   assert.ok((await readdir(join(f.directory, "reopened"))).includes("review.html"));

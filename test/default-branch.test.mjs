@@ -46,95 +46,62 @@ test("Fails explicitly when GitHub's default branch is not fetched", (t) => {
   assert.throws(() => resolveDefaultBranch(f.cwd, () => "unfetched"), /not available locally/);
 });
 
-for (const strategy of ["merge", "squash", "rebase"]) {
-  test(`Merged PR keeps its original diff and commits after ${strategy} merging and base advancement`, (t) => {
-    const f = fixture(t);
-    const defaultBranch = f.git("branch", "--show-current").trim();
-    const originalBase = f.git("rev-parse", "HEAD").trim();
-    f.git("checkout", "--quiet", "-b", "feature");
-    const commit = (path, content) => {
-      writeFileSync(join(f.cwd, path), content);
-      f.git("add", path);
-      f.git("commit", "--quiet", "-m", content.trim());
-      return f.git("rev-parse", "HEAD").trim();
-    };
-    const first = commit("feature.txt", "first\n");
-    const head = commit("feature.txt", "second\n");
-    f.git("checkout", "--quiet", defaultBranch);
-    const baseRefOid = commit("upstream.txt", "upstream\n");
-    if (strategy === "merge") f.git("merge", "--no-ff", "--no-edit", "feature");
-    else if (strategy === "squash") {
-      f.git("merge", "--squash", "feature");
-      f.git("commit", "--quiet", "-m", "squashed");
-    } else {
-      f.git("cherry-pick", first, head);
-    }
-    commit("later.txt", "later\n");
-    f.git("update-ref", "refs/remotes/origin/main", "HEAD");
-    f.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
-    f.git("checkout", "--quiet", "feature");
-    const base = resolveReviewBase(f.cwd, { lookupMergedPullRequests: (branch) => {
-      assert.equal(branch, "feature");
-      return [{ headRefOid: head, baseRefOid }];
-    } });
-    assert.equal(base, baseRefOid);
-    const report = analyzeLocal({ cwd: f.cwd, base, includeWorking: true });
-    assert.equal(report.comparison.mergeBaseSha, originalBase);
-    assert.equal(report.comparison.headSha, head);
-    assert.deepEqual(report.commits.map((entry) => entry.sha), [first, head]);
-    assert.deepEqual(report.metrics.fileMetrics.map((file) => file.path), ["feature.txt"]);
-    assert.match(getLocalFileDiff({ cwd: f.cwd, report, scope: "whole", path: "feature.txt" }).diff, /\+second/);
-    assert.match(getLocalFileDiff({ cwd: f.cwd, report, scope: "commit:1", path: "feature.txt" }).diff, /-first\n\+second/);
-    writeFileSync(join(f.cwd, "feature.txt"), "staged\n");
-    f.git("add", "feature.txt");
-    const mutable = analyzeLocal({ cwd: f.cwd, base, includeWorking: true });
-    assert.match(getLocalFileDiff({ cwd: f.cwd, report: mutable, scope: "index", path: "feature.txt" }).diff,
-      /-second\n\+staged/);
-  });
+function commit(f, path, content) {
+  writeFileSync(join(f.cwd, path), content);
+  f.git("add", path);
+  f.git("commit", "--quiet", "-m", content.trim());
+  return f.git("rev-parse", "HEAD").trim();
 }
 
-test("Explicit bases, default branches, and detached checkouts do not query merged PRs", (t) => {
+function publish(f) {
+  f.git("update-ref", "refs/remotes/origin/main", "HEAD");
+  f.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+}
+
+test("A merged branch keeps its original diff and commits as the default branch advances", (t) => {
   const f = fixture(t);
-  const lookupMergedPullRequests = () => assert.fail("Should not query merged PRs");
-  assert.equal(resolveReviewBase(f.cwd, { base: "HEAD~1", lookupMergedPullRequests }), "HEAD~1");
-  const branch = f.git("branch", "--show-current").trim();
-  assert.equal(resolveReviewBase(f.cwd, {
-    lookupDefaultBranch: () => branch, lookupMergedPullRequests,
-  }), branch);
-  f.git("checkout", "--quiet", "--detach");
-  assert.equal(resolveReviewBase(f.cwd, {
-    lookupDefaultBranch: () => branch, lookupMergedPullRequests,
-  }), branch);
+  const defaultBranch = f.git("branch", "--show-current").trim();
+  const originalBase = f.git("rev-parse", "HEAD").trim();
+  f.git("checkout", "--quiet", "-b", "feature");
+  const first = commit(f, "feature.txt", "first\n");
+  const head = commit(f, "feature.txt", "second\n");
+  f.git("checkout", "--quiet", defaultBranch);
+  const baseAtMerge = commit(f, "upstream.txt", "upstream\n");
+  f.git("merge", "--quiet", "--no-ff", "--no-edit", "feature");
+  f.git("checkout", "--quiet", "-b", "other");
+  commit(f, "other.txt", "other\n");
+  f.git("checkout", "--quiet", defaultBranch);
+  f.git("merge", "--quiet", "--no-ff", "--no-edit", "other");
+  commit(f, "later.txt", "later\n");
+  publish(f);
+  f.git("checkout", "--quiet", "feature");
+
+  assert.equal(analyzeLocal({ cwd: f.cwd, base: "origin/main" }).commits.length, 0);
+  const base = resolveReviewBase(f.cwd);
+  assert.equal(base, baseAtMerge);
+  const report = analyzeLocal({ cwd: f.cwd, base, includeWorking: true });
+  assert.equal(report.comparison.mergeBaseSha, originalBase);
+  assert.deepEqual(report.commits.map((entry) => entry.sha), [first, head]);
+  assert.deepEqual(report.metrics.fileMetrics.map((file) => file.path), ["feature.txt"]);
+  assert.match(getLocalFileDiff({ cwd: f.cwd, report, scope: "commit:1", path: "feature.txt" }).diff,
+    /-first\n\+second/);
 });
 
-test("Unmerged branches and branches with post-merge commits keep the default base", (t) => {
+test("Explicit, unmerged, and already-contained checkouts keep the requested or default base", (t) => {
   const f = fixture(t);
-  const branch = f.git("branch", "--show-current").trim();
-  const oldHead = f.git("rev-parse", "HEAD").trim();
-  f.git("checkout", "--quiet", "-b", "feature");
-  writeFileSync(join(f.cwd, "next.txt"), "next\n");
-  f.git("add", "next.txt");
-  f.git("commit", "--quiet", "-m", "next");
-  for (const prs of [[], [{ headRefOid: oldHead, baseRefOid: oldHead }]]) {
-    assert.equal(resolveReviewBase(f.cwd, {
-      lookupDefaultBranch: () => branch, lookupMergedPullRequests: () => prs,
-    }), branch);
-  }
-});
+  const defaultBranch = f.git("branch", "--show-current").trim();
+  publish(f);
+  assert.equal(resolveReviewBase(f.cwd, { base: "HEAD~1" }), "HEAD~1");
+  assert.equal(resolveReviewBase(f.cwd), "origin/main");
 
-test("Missing merged-PR history and lookup failures are reported explicitly", (t) => {
-  const f = fixture(t);
-  const branch = f.git("branch", "--show-current").trim();
-  const headRefOid = f.git("rev-parse", "HEAD").trim();
+  f.git("checkout", "--quiet", "-b", "stale");
+  f.git("checkout", "--quiet", defaultBranch);
+  commit(f, "advanced.txt", "advanced\n");
+  publish(f);
+  f.git("checkout", "--quiet", "stale");
+  assert.equal(resolveReviewBase(f.cwd), "origin/main");
+
   f.git("checkout", "--quiet", "-b", "feature");
-  const options = { lookupDefaultBranch: () => branch };
-  assert.throws(() => resolveReviewBase(f.cwd, {
-    ...options, lookupMergedPullRequests: () => [{ headRefOid, baseRefOid: "f".repeat(40) }],
-  }), /not available locally/);
-  assert.throws(() => resolveReviewBase(f.cwd, {
-    ...options, lookupMergedPullRequests: () => [{ headRefOid, baseRefOid: null }],
-  }), /no recorded base/);
-  assert.throws(() => resolveReviewBase(f.cwd, {
-    ...options, lookupMergedPullRequests: () => { throw new Error("GitHub authentication failed"); },
-  }), /GitHub authentication failed/);
+  commit(f, "feature.txt", "feature\n");
+  assert.equal(resolveReviewBase(f.cwd), "origin/main");
 });

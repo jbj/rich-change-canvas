@@ -26,29 +26,25 @@ export function resolveDefaultBranch(cwd, lookupDefaultBranch = () =>
   throw new Error(`Default branch "${branch}" is not available locally. Fetch it before opening the canvas.`);
 }
 
-export function resolveReviewBase(cwd, { base, lookupDefaultBranch, lookupMergedPullRequests = (branch) =>
-  JSON.parse(run("gh", ["pr", "list", "--state", "merged", "--head", branch,
-    "--limit", "100", "--json", "headRefOid,baseRefOid"], { cwd })) } = {}) {
+function isAncestor(cwd, ancestor, descendant) {
+  return run("git", ["rev-list", "--count", `${descendant}..${ancestor}`], { cwd }).trim() === "0";
+}
+
+// Once HEAD has been merged, merge-base(default, HEAD) is HEAD itself and the
+// diff is empty. The oldest first-parent commit on the default branch that
+// contains HEAD is the commit that merged it; its first parent is the default
+// branch as it was at merge time, recorded immutably in local history.
+export function resolveReviewBase(cwd, { base, lookupDefaultBranch } = {}) {
   if (base !== undefined) return base;
   const defaultBranch = resolveDefaultBranch(cwd, lookupDefaultBranch);
-  const branch = run("git", ["symbolic-ref", "--quiet", "--short", "HEAD"], {
-    cwd, allowedExitCodes: [0, 1],
-  }).trim();
-  const defaultRef = run("git", ["rev-parse", "--symbolic-full-name", defaultBranch], { cwd }).trim();
-  const defaultName = defaultRef.replace(/^refs\/(?:remotes\/origin|heads)\//, "");
-  if (!branch || branch === defaultName) return defaultBranch;
-
-  const headSha = run("git", ["rev-parse", "--verify", "HEAD"], { cwd }).trim();
-  const merged = lookupMergedPullRequests(branch).find((pr) => pr.headRefOid === headSha);
-  if (!merged) return defaultBranch;
-  if (!/^[0-9a-f]{40,64}$/.test(merged.baseRefOid ?? "")) {
-    throw new Error("Merged PR has no recorded base commit. Open the canvas with an explicit base.");
-  }
-  const available = run("git", ["rev-parse", "--verify", "--quiet", `${merged.baseRefOid}^{commit}`], {
-    cwd, allowedExitCodes: [0, 1],
-  }).trim();
-  if (!available) {
-    throw new Error(`Merged PR base commit "${merged.baseRefOid}" is not available locally. Fetch its history before opening the canvas.`);
-  }
-  return merged.baseRefOid;
+  const head = run("git", ["rev-parse", "--verify", "HEAD^{commit}"], { cwd }).trim();
+  if (!isAncestor(cwd, head, defaultBranch)) return defaultBranch;
+  const [mergeCommit] = run("git", [
+    "rev-list", "--first-parent", "--ancestry-path", "--reverse", `${head}..${defaultBranch}`,
+  ], { cwd }).split("\n").filter(Boolean);
+  if (!mergeCommit) return defaultBranch;
+  const [, firstParent, ...otherParents] = run("git", ["rev-list", "--parents", "-n", "1", mergeCommit], { cwd })
+    .trim().split(" ");
+  if (!firstParent || !otherParents.length || isAncestor(cwd, head, firstParent)) return defaultBranch;
+  return firstParent;
 }

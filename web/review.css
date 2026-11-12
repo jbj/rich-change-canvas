@@ -72,10 +72,10 @@ label { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 1
 .num { font-size: 18px; line-height: 22px; font-weight: 600; }
 .stat-label { color: var(--muted); font-size: 10px; }
 .footprint-table, .footprint-table thead, .footprint-table tbody { display: block; width: 100%; }
-.footprint-table tr { display: grid; grid-template-columns: var(--label-column, minmax(0, 1fr)) var(--value-column, max-content) var(--bar-column, max-content) minmax(0, 1fr); border-bottom: 1px solid var(--border); }
+.footprint-table tr { display: grid; grid-template-columns: var(--label-column, minmax(0, 1fr)) var(--value-column, max-content) var(--secondary-column, max-content) minmax(0, 1fr); border-bottom: 1px solid var(--border); }
 .footprint-table th, .footprint-table td { display: block; min-width: 0; padding: 4px 8px; border-bottom: 0; }
 .footprint-table th:nth-child(2), .footprint-table td:nth-child(2) { text-align: right; overflow-wrap: anywhere; }
-.footprint-table th:nth-child(3), .footprint-table td:nth-child(3) { text-align: right; }
+.footprint-table th:nth-child(3), .footprint-table td:nth-child(3) { text-align: right; overflow-wrap: anywhere; }
 .footprint-table .diff-row > td { grid-column: 1 / -1; }
 .column-probe { position: fixed; inset: 0 auto auto 0; visibility: hidden; pointer-events: none; width: max-content; min-width: 0; max-width: none; white-space: nowrap; }
 .column-probe .file-name { width: auto; min-width: 0; flex: none; }
@@ -96,15 +96,9 @@ label { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 1
 .role-generated, .role-binary { --role-color: var(--muted); }
 .count { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .count .added, .count .deleted { display: inline-block; max-width: 100%; }
-.mini-bar { width: 64px; max-width: 100%; height: 7px; display: block; margin-left: auto; overflow: hidden; }
-.bar-before { fill: var(--muted); }
-.bar-after { fill: var(--blue); }
-.snapshot-before { color: var(--muted); }
-.snapshot-after { color: var(--blue); }
 #metric-note { font-size: 10px; line-height: 15px; margin: 0 0 8px; }
 .num.coverage { font: inherit; font-size: 10px; line-height: 15px; max-width: 44em; }
 .alternative-metric .count { white-space: normal; }
-.legend { display: flex; flex-wrap: wrap; gap: 0 8px; font-size: 9px; line-height: 14px; margin: 6px 0 0; }
 details > summary { cursor: pointer; overflow-wrap: anywhere; }
 details[open] > summary { margin-bottom: 6px; }
 details details { padding: 5px 0; border-top: 1px solid var(--border); }

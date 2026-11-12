@@ -29,7 +29,7 @@ export function inspectTableLayout(table) {
         const text = Array.from(segments.segment(label.textContent), ({ segment }) => segment);
         if (text.length > 10) label.textContent = label.matches(".file-name") ?
           `${text.slice(0, 5).join("")}...${text.slice(-5).join("")}` : text.slice(0, 10).join("");
-      } else if (index === 1) {
+      } else {
         (probe.querySelector(".count") ?? probe).textContent = "0";
       }
     }
@@ -55,11 +55,11 @@ export function inspectTableLayout(table) {
   }
   for (const row of rows) for (const cell of [...row.cells].slice(1)) {
     if (cell.hidden) continue;
-    const value = cell.querySelector(".count") ?? cell.querySelector("svg");
-    if (!value) continue;
+    const value = cell.querySelector(".count");
+    if (!value?.textContent) continue;
     const range = table.ownerDocument.createRange();
     range.selectNodeContents(value);
-    const right = value.tagName.toLowerCase() === "svg" ? value.getBoundingClientRect().right : range.getBoundingClientRect().right;
+    const right = range.getBoundingClientRect().right;
     if (Math.abs(right - cell.getBoundingClientRect().right + parseFloat(win.getComputedStyle(cell).paddingRight)) > 1.5) {
       problems.push("Stats content is not right-aligned");
     }
@@ -97,7 +97,7 @@ export async function auditReview(frame, widths = [480, 640, 800, 1024, 1280]) {
     const overflow = doc.documentElement.scrollWidth - doc.documentElement.clientWidth;
     if (overflow > 1) fail(context, `Document overflows by ${overflow}px`);
     for (const problem of inspectTableLayout(get("footprint-table")).problems) fail(context, problem);
-    for (const cell of doc.querySelectorAll(".category-row td:nth-child(2), .file-row:not([hidden]) td:nth-child(2)")) {
+    for (const cell of doc.querySelectorAll(".category-row td:not(:first-child), .file-row:not([hidden]) td:not(:first-child)")) {
       if (cell.scrollWidth > cell.clientWidth + 1) {
         fail(context, `Metric cell overflows: ${cell.textContent}`);
         break;
@@ -146,12 +146,26 @@ export async function auditReview(frame, widths = [480, 640, 800, 1024, 1280]) {
       get("reports-panel").open = !get("reports-panel").hidden;
       get("commits-panel").open = true;
       const context = { width, report: index, repository: report.source.repository };
-      for (const option of [...get("scope").options]) {
-        select("scope", option.value);
-        await settle();
-        result.scopeChecks++;
-        check({ ...context, scope: option.value });
+      for (const metric of ["lines", "summary"]) {
+        select("metric", metric);
+        for (const option of [...get("scope").options]) {
+          select("scope", option.value);
+          await settle();
+          result.scopeChecks++;
+          check({ ...context, metric, scope: option.value });
+          if (metric === "summary") {
+            const current = option.value === "all" ? report.allMetrics : option.value === "whole" ? report.metrics :
+              option.value.startsWith("commit:") ? report.commits[Number(option.value.slice(7))].metrics :
+                report.layers.find((layer) => layer.id === option.value).metrics;
+            const expected = current.fileMetrics.some((file) => {
+              const delta = file.alternativeMetrics?.["cyclomatic-complexity"]?.delta;
+              return Number.isFinite(delta) && delta !== 0;
+            });
+            if (get("complexity-heading").hidden === expected) fail({ ...context, scope: option.value }, "Incorrect Summary complexity column visibility");
+          }
+        }
       }
+      select("metric", "lines");
       select("scope", "whole");
       await settle();
       const collapsed = inspectTableLayout(get("footprint-table")).widths;

@@ -197,8 +197,14 @@ study below has separate, stronger review-selection evidence.
 
 ## Selectable metrics
 
-Use **Metric** next to Scope to switch the existing totals, role table, expanded
-file rows, and bars. Added/deleted text lines remain the default. Metric changes
+Use **Metric** next to Scope to switch the existing totals, role table, and
+expanded file rows. **Summary** is the default: it always shows **+added /
+−deleted** text lines and adds a **Cyclomatic complexity** column when at least
+one file in the selected scope has a nonzero complexity delta. Offsetting file
+deltas still show the column even if the role total is zero. Inapplicable
+complexity entries are blank, rather than labeled "Not applicable". Summary sits
+above the grouped metric choices, and its totals line ends with the signed
+cyclomatic-complexity delta when that scope total is nonzero. Metric changes
 preserve expanded roles; report/scope changes preserve the metric selection.
 Original-commit counts and Compare reports remain explicitly labeled
 text-line navigation summaries.
@@ -217,10 +223,12 @@ Files where a metric does not apply are omitted, along with empty role groups;
 an entirely inapplicable scope is labeled "Not applicable", not a signed N/A.
 Commit navigation stays available even when a commit has no text-line changes.
 
-Bytes, averages, maxima, and repeated lines retain whole-file before → after
-values and a signed delta. Their neutral bars show before on top and after
-underneath, with a shared linear scale. Repetition depends on surrounding
-lines, so its counts cannot be measured from isolated changed lines. No metric
+Bytes, averages, maxima, repeated lines, and cyclomatic complexity show only
+signed whole-file deltas: positive values are green, negative values are red,
+and measured zero deltas are blank. Missing or partial measurements retain their
+availability indicators and coverage tooltips. There are no snapshot charts.
+Repetition depends on surrounding lines, so its counts cannot be measured from
+isolated changed lines. No metric
 is a quality score; none of the built-in metrics uses percentages.
 
 | Language-independent metric | Definition / role and scope aggregation |

@@ -357,12 +357,22 @@ repository's default branch and uses its locally available ref. It does not
 fetch branches or execute repository code. If the default branch is not
 available locally, fetch it and reopen the canvas.
 
+For a branch whose current HEAD matches a merged GitHub PR, the canvas uses
+the PR's recorded pre-merge base commit instead of today's default branch.
+This preserves the original committed diff and commit scopes after merge,
+squash, or rebase merging, even as the default branch advances. The recorded
+base must be available locally; fetch its history if needed. Branches with
+new commits after the PR was merged keep the normal default-branch comparison.
+
 For repositories without a remote, pass an explicit baseline when opening the
 canvas, for example `input: { "base": "main" }`. The project extension resolves
 the checkout from its own location, not the session's artifact directory.
+An explicit base bypasses merged-PR detection.
 
 The canvas requires installed analyzer dependencies, the Copilot App extension runtime and an authenticated
-`gh` installation when a usable `origin/HEAD` ref is not available.
+`gh` installation when a usable `origin/HEAD` ref is not available or when
+checking a non-default branch for a merged PR. GitHub lookup failures are
+surfaced rather than silently showing a potentially empty comparison.
 
 Run the analyzer, persistence, CLI, renderer, and corpus-replay tests:
 

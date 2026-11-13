@@ -74,6 +74,26 @@ test("Zero-line binary rename fetches both paths and exposes bytes", async () =>
   assert.equal(emptyPatch.metrics.binaryFiles, 1);
 });
 
+test("Modified renames use the old path in PR and original-commit patches, including reconstruction", async () => {
+  for (const missing of [false, true]) {
+    const f = fixture({ missing });
+    Object.assign(f.file, { filename: "new.go", previous_filename: "old.go", status: "renamed" });
+    const report = await analyzePullRequest({ repository: "test/repo", number: 1, api: f.api });
+    for (const files of [report.metrics.fileMetrics, report.commits[0].metrics.fileMetrics]) {
+      const [file] = files;
+      assert.equal(file.previousPath, "old.go");
+      assert.deepEqual([file.additions, file.deletions], [1, 1]);
+      assert.match(file.diff.diff, /-old\n\+new/);
+      assert.doesNotMatch(file.diff.diff, /\/dev\/null/);
+      if (missing) assert.match(file.diff.diff, /--- a\/old\.go\n\+\+\+ b\/new\.go\n/);
+    }
+    assert.ok(f.calls.includes("repos/test/repo/contents/old.go?ref=merge-base"));
+    assert.ok(f.calls.includes("repos/test/repo/contents/old.go?ref=parent"));
+    assert.ok(f.calls.includes("repos/test/repo/contents/new.go?ref=head"));
+    assert.equal(f.calls.some((path) => /contents\/new\.go\?ref=(merge-base|parent)$/.test(path)), false);
+  }
+});
+
 test("Blob API fallback checks exact bytes and acquisition budgets", async () => {
   const f = fixture();
   const api = (path) => path.includes("/contents/") ? { type: "file", size: 5, encoding: "none", sha: "blob" } :

@@ -111,7 +111,7 @@ export function getLocalFileDiff({ cwd = process.cwd(), report, scope, path,
   if (!file) throw new LocalDiffRequestError(404, "File is not part of this scope");
   if (file.binary) return { binary: true, diff: "" };
 
-  const common = ["--no-ext-diff", "--no-textconv", "--no-color", "--unified=3"];
+  const common = ["--no-ext-diff", "--no-textconv", "--no-color", "--unified=3", "--find-renames"];
   const git = (gitArgs) => run("git", [
     "--no-pager", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false",
     "-c", "core.quotePath=false", "diff", ...gitArgs,
@@ -127,7 +127,8 @@ export function getLocalFileDiff({ cwd = process.cwd(), report, scope, path,
       }
       return { binary: false, diff: git(["--no-index", ...common, "--", "/dev/null", path]) };
     }
-    return { binary: false, diff: git([...common, ...args, "--", `:(literal)${path}`]) };
+    const paths = [...new Set([file.previousPath, path].filter(Boolean))].map((path) => `:(literal)${path}`);
+    return { binary: false, diff: git([...common, ...args, "--", ...paths]) };
   } catch (error) {
     if (error.cause?.code === "ENOBUFS") return { tooLarge: true, diff: "" };
     throw error;

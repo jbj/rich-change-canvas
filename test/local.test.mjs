@@ -117,6 +117,70 @@ test("Zero-line binary rename preserves byte sizes and rename identity", (t) => 
   assert.equal(report.metrics.categories.binary.afterBytes, 4);
 });
 
+test("Renamed text diffs retain both sides in every local scope and saved CLI reports", async (t) => {
+  const f = fixture(t);
+  const paths = ["old[1].txt", "commit*.txt", "committed?.txt", "staged[2].txt", "working*.txt"];
+  const content = (changes) => Array.from({ length: 40 }, (_, index) =>
+    `${index < changes ? "changed" : "original"} line ${index}`).join("\n") + "\n";
+  f.write(paths[0], content(0));
+  f.write("unrelated.txt", "before\n");
+  const base = f.commit("base");
+  f.git("config", "diff.renames", "false");
+  for (let index = 1; index <= 2; index++) {
+    renameSync(join(f.root, paths[index - 1]), join(f.root, paths[index]));
+    f.write(paths[index], content(index));
+    f.commit(`rename ${index}`);
+  }
+  renameSync(join(f.root, paths[2]), join(f.root, paths[3]));
+  f.write(paths[3], content(3));
+  f.git("add", "--all");
+  renameSync(join(f.root, paths[3]), join(f.root, paths[4]));
+  f.write(paths[4], content(4));
+  f.git("add", "--intent-to-add", "--", paths[4]);
+  f.write("unrelated.txt", "after\n");
+  f.write("untracked.txt", "new file\n");
+
+  const report = analyzeLocal({ cwd: f.root, base, includeWorking: true });
+  const output = mkdtempSync(join(tmpdir(), "rich-renamed-diffs-"));
+  t.after(() => rmSync(output, { recursive: true, force: true }));
+  await saveReport(output, report);
+  const restored = await loadReport(output, report.id);
+  const scopes = [
+    ["whole", paths[0], paths[2], 2],
+    ["commit:0", paths[0], paths[1], 1],
+    ["commit:1", paths[1], paths[2], 1],
+    ["index", paths[2], paths[3], 1],
+    ["working", paths[3], paths[4], 1],
+  ];
+  const check = (report, embedded = false) => {
+    for (const [scope, previousPath, path, count] of scopes) {
+      const files = scope === "whole" ? report.metrics.fileMetrics :
+        scope.startsWith("commit:") ? report.commits[Number(scope.slice(7))].metrics.fileMetrics :
+          report.layers.find((layer) => layer.id === scope).metrics.fileMetrics;
+      const file = files.find((file) => file.path === path);
+      assert.equal(file.status, "renamed", scope);
+      assert.equal(file.previousPath, previousPath, scope);
+      assert.deepEqual([file.additions, file.deletions], [count, count], scope);
+      const { diff } = embedded ? file.diff : getLocalFileDiff({ cwd: f.root, report, scope, path });
+      assert.doesNotMatch(diff, /\/dev\/null|unrelated\.txt/, scope);
+      assert.ok(diff.includes(`rename from ${previousPath}\n`), scope);
+      assert.ok(diff.includes(`rename to ${path}\n`), scope);
+      assert.equal(diff.split("\n").filter((line) => line.startsWith("+") && !line.startsWith("+++")).length, count, scope);
+      assert.equal(diff.split("\n").filter((line) => line.startsWith("-") && !line.startsWith("---")).length, count, scope);
+      assert.match(diff, /-original line \d+/, scope);
+      assert.match(diff, /\+changed line \d+/, scope);
+    }
+    const untracked = embedded ? report.layers.find((layer) => layer.id === "untracked").files[0].diff :
+      getLocalFileDiff({ cwd: f.root, report, scope: "untracked", path: "untracked.txt" });
+    assert.match(untracked.diff, /--- \/dev\/null\n/);
+    assert.match(untracked.diff, /\+new file\n/);
+  };
+  check(restored);
+  run(process.execPath, [resolve("cli.mjs"), "local", "--cwd", f.root, "--base", base, "--working", "--out", output]);
+  const embeddedId = readdirSync(output).find((name) => name.endsWith(".json") && name !== `${report.id}.json`).slice(0, -5);
+  check(await loadReport(output, embeddedId), true);
+});
+
 test("Untracked symlinks are measured as link text, not followed", (t) => {
   const f = fixture(t);
   f.write("a", "base"); const base = f.commit("base");

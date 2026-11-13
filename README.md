@@ -160,6 +160,9 @@ the choice applies to other open and newly opened diffs for that page session.
 Diff regions are keyboard-focusable and scroll independently. The live canvas
 loads local diffs on demand up to 256 KiB; CLI reports embed diffs for committed,
 original-commit, and requested working scopes so they work offline.
+Renamed-and-modified files compare the previous and current paths in each scope.
+If an older saved local report shows an added-only diff for a rename, regenerate
+it with `local`: `view` preserves embedded patches and cannot repair them offline.
 Expand Original commits to select a commit and update the same overview;
 scope selectors keep that overview in place. Report comparison and search/shape
 filters are available in an expandable section when there are multiple reports
